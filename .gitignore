@@ -100,3 +100,7 @@ CTestTestfile.cmake
 _deps
 cmake-build-debug
 cmake-build-debug-coverage
+compile_flags.txt
+
+### CLion
+.idea
