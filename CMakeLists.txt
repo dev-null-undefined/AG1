@@ -9,3 +9,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 project(ag1_progtest_01_1)
 add_executable(ag1_progtest_01_1 pt01/main.cpp)
+
+project(ag1_avl_tree)
+add_executable(ag1_avl_tree pt02/avl_tree_tester.cpp)
