@@ -5,6 +5,8 @@
 
 // TODO: fix const methods
 // TODO: ad no throw
+// TODO: initializer list constructor
+// TODO: instance of comparator as argument to constructor
 #define AVL_TREE_TESTING 1
 namespace stl {
 
@@ -63,12 +65,14 @@ namespace stl {
             explicit Node(value_type & data, Node * parent = nullptr) : data(
                     reinterpret_cast<value_type *>(data_buffer)),
                                                                         parent(parent), is_real(true) {
+                if (parent) depth = parent->depth + 1;
                 new(static_cast<void *>(data_buffer)) value_type(data);
             }
 
             explicit Node(value_type && data, Node * parent = nullptr) : data(
                     reinterpret_cast<value_type *>(data_buffer)),
                                                                          parent(parent), is_real(true) {
+                if (parent) depth = parent->depth + 1;
                 new(static_cast<void *>(data_buffer)) value_type(std::move(data));
             }
 
@@ -76,10 +80,14 @@ namespace stl {
 
             Node(const Node & other) {
                 *this = other;
+                maxDepth = other.depth;
+                depth = other.depth;
             }
 
             Node(Node && other) {
                 *this = other;
+                maxDepth = other.depth;
+                depth = other.depth;
             }
 
             Node & operator=(const Node & other) {
@@ -98,13 +106,21 @@ namespace stl {
                     clear();
                     return *this;
                 }
-                is_real = true;
+                data = reinterpret_cast<value_type *>(data_buffer);
                 if constexpr (std::is_trivially_copy_assignable_v<value_type>) {
+                    if (is_real) {
+                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                        return *this;
+                    }
+                } else {
+                    clear();
+                }
+                is_real = true;
+                if constexpr (std::is_trivially_copy_constructible_v<value_type>) {
                     copy_array(other.data_buffer, data_buffer, sizeof(value_type));
                 } else {
                     new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
                 }
-                data = reinterpret_cast<value_type *>(data_buffer);
                 return *this;
             }
 
@@ -124,14 +140,27 @@ namespace stl {
                     clear();
                     return *this;
                 }
+                data = reinterpret_cast<value_type *>(data_buffer);
                 other.is_real = false;
-                is_real = true;
+                other.data = nullptr;
                 if constexpr (std::is_trivially_move_assignable_v<value_type>) {
+                    if (is_real) {
+                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                        return *this;
+                    }
+                } else {
+                    clear();
+                }
+                is_real = true;
+                if constexpr (std::is_trivially_move_constructible_v<value_type>) {
                     copy_array(other.data_buffer, data_buffer, sizeof(value_type));
                 } else {
-                    new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
+                    if constexpr (std::is_nothrow_move_constructible_v<value_type>) {
+                        new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
+                    } else {
+                        new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                    }
                 }
-                data = reinterpret_cast<value_type *>(data_buffer);
                 return *this;
             }
 
@@ -157,7 +186,8 @@ namespace stl {
             sus_ptr<Node> parent = nullptr;
             std::unique_ptr<Node> left = nullptr;
             std::unique_ptr<Node> right = nullptr;
-            long long int depth = 0; // TODO: <--- this
+            long long int maxDepth = 0; // TODO: <--- this
+            long long int depth = -1;
             bool is_real = false;
 
 
@@ -350,6 +380,7 @@ namespace stl {
             header->left = std::make_unique<Node>(std::move(data));
             root = header->left.get();
             root->parent = header.get();
+            root->depth = 0;
             return root;
         }
 
@@ -379,12 +410,14 @@ namespace stl {
             if (&other == this) return *this;
             header = std::make_unique<Node>(unmove(*other.header));
             root = header->left.get();
+            return *this;
         }
 
         AVLTree & operator=(AVLTree && other) {
             if (&other == this) return *this;
             header = std::make_unique<Node>(std::move(*other.header));
             root = header->left.get();
+            return *this;
         }
 
 
@@ -399,7 +432,21 @@ namespace stl {
             }
 
             descendant_ptr member_ptr = compare(result.compare);
-            return {(result.node->*member_ptr = std::make_unique<Node>(std::move(element), result.node)).get(), true};
+            result.node->*member_ptr = std::make_unique<Node>(std::move(element), result.node);
+
+            sus_ptr<Node> inserted = (result.node->*member_ptr).get();
+            long long int depth = inserted->depth;
+
+            sus_ptr<Node> current = inserted;
+            while (current->parent) {
+                if (current->maxDepth < depth) {
+                    current->maxDepth = depth;
+                } else {
+                    break;
+                }
+                current = current->parent;
+            }
+            return {(result.node->*member_ptr).get(), true};
         }
 
         template<typename... M>
