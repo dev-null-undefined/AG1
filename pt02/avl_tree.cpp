@@ -10,6 +10,19 @@ namespace stl {
 
     template<typename K>
     using sus_ptr = K *;
+
+    template<typename T>
+    void copy_array(const T & source, T & destination, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            destination[i] = source[i];
+        }
+    }
+
+    template<class T>
+    T & unmove(T && t) {
+        return t;
+    }
+
 #if __cplusplus >= 202002L
     template<typename T, typename Compare=std::compare_three_way> // TODO: default back to less if not possible to use three way
 #else
@@ -47,25 +60,95 @@ namespace stl {
       private:
 
         struct Node {
-            explicit Node(value_type data, Node * parent = nullptr) : data(reinterpret_cast<value_type *>(data_buffer)),
-                                                                      parent(parent), is_real(true) {
+            explicit Node(value_type & data, Node * parent = nullptr) : data(
+                    reinterpret_cast<value_type *>(data_buffer)),
+                                                                        parent(parent), is_real(true) {
+                new(static_cast<void *>(data_buffer)) value_type(data);
+            }
+
+            explicit Node(value_type && data, Node * parent = nullptr) : data(
+                    reinterpret_cast<value_type *>(data_buffer)),
+                                                                         parent(parent), is_real(true) {
                 new(static_cast<void *>(data_buffer)) value_type(std::move(data));
             }
 
             Node() = default;
 
-            Node & operator=(const Node other) {
-                if (is_real) data->~value_type();
-                is_real = other.is_real;
-                new(static_cast<void *>(data_buffer)) value_type(std::move(other.data));
+            Node(const Node & other) {
+                *this = other;
+            }
+
+            Node(Node && other) {
+                *this = other;
+            }
+
+            Node & operator=(const Node & other) {
+                if (&other == this) return *this;
+                left = nullptr;
+                if (other.left) {
+                    left = std::make_unique<Node>(unmove(*other.left));
+                    left->parent = this;
+                }
+                right = nullptr;
+                if (other.right) {
+                    right = std::make_unique<Node>(unmove(*other.right));
+                    right->parent = this;
+                }
+                if (!other.is_real) {
+                    clear();
+                    return *this;
+                }
+                is_real = true;
+                if constexpr (std::is_trivially_copy_assignable_v<value_type>) {
+                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                } else {
+                    new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                }
+                data = reinterpret_cast<value_type *>(data_buffer);
+                return *this;
+            }
+
+            Node & operator=(Node && other) {
+                if (&other == this) return *this;
+                left = nullptr;
+                if (other.left) {
+                    left = std::make_unique<Node>(std::move(*other.left));
+                    left->parent = this;
+                }
+                right = nullptr;
+                if (other.right) {
+                    right = std::make_unique<Node>(std::move(*other.right));
+                    right->parent = this;
+                }
+                if (!other.is_real) {
+                    clear();
+                    return *this;
+                }
+                other.is_real = false;
+                is_real = true;
+                if constexpr (std::is_trivially_move_assignable_v<value_type>) {
+                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                } else {
+                    new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
+                }
+                data = reinterpret_cast<value_type *>(data_buffer);
+                return *this;
             }
 
             ~Node() {
-                data->~value_type();
+                clear();
             }
 
             explicit operator value_type &() {
                 return *data;
+            }
+
+            void clear() {
+                if (is_real) {
+                    data->~value_type();
+                    data = nullptr;
+                }
+                is_real = false;
             }
 
             value_type * data = nullptr;
@@ -74,7 +157,7 @@ namespace stl {
             sus_ptr<Node> parent = nullptr;
             std::unique_ptr<Node> left = nullptr;
             std::unique_ptr<Node> right = nullptr;
-            size_type depth; // TODO: <--- this
+            long long int depth = 0; // TODO: <--- this
             bool is_real = false;
 
 
@@ -133,16 +216,14 @@ namespace stl {
             }
         };
 
-
         Comparator three_way_compare{comparator};
-
 
         template<typename TypePointer>
         struct avl_iterator
                 : std::iterator<std::bidirectional_iterator_tag, value_type, difference_type, pointer, reference> {
             sus_ptr<Node> current;
 
-            avl_iterator(const sus_ptr<Node> current) : current(current) {}
+            explicit avl_iterator(const sus_ptr<Node> current) : current(current) {}
 
             void move(bool forward) {
                 auto left = Node::left_ptr;
@@ -272,10 +353,38 @@ namespace stl {
             return root;
         }
 
+        sus_ptr<Node> firstNode() const {
+            sus_ptr<Node> current = root;
+            while (current && current->left) {
+                current = current->left.get();
+            }
+            return current;
+        }
+
       public:
 
         AVLTree() {
             header = std::make_unique<Node>();
+        }
+
+        AVLTree(const AVLTree & other) {
+            *this = other;
+        }
+
+        AVLTree(AVLTree && other) {
+            *this = other;
+        }
+
+        AVLTree & operator=(const AVLTree & other) {
+            if (&other == this) return *this;
+            header = std::make_unique<Node>(unmove(*other.header));
+            root = header->left.get();
+        }
+
+        AVLTree & operator=(AVLTree && other) {
+            if (&other == this) return *this;
+            header = std::make_unique<Node>(std::move(*other.header));
+            root = header->left.get();
         }
 
 
@@ -285,7 +394,7 @@ namespace stl {
             avl_find_result result = inner_find(element);
             if (result) return {result.node, false};
             if (result.compare == none) {
-                setRoot(value_type(std::forward<M>(arguments)...));
+                setRoot(std::move(element));
                 return {root, true};
             }
 
@@ -305,46 +414,42 @@ namespace stl {
             return (bool) inner_find(value_type(std::forward<M>(arguments)...));
         }
 
+        //<editor-fold desc="Iterators">
         iterator end() {
-            return {header.get()};
+            return iterator(header.get());
         }
 
         iterator begin() {
-            sus_ptr<Node> current = root;
-            while (current && current->left) {
-                current = current->left.get();
-            }
-            if (current) return {current};
+            sus_ptr<Node> current = firstNode();
+            if (current) return iterator(current);
             return end();
         }
 
         reverse_iterator rend() {
-            return reverse_iterator({begin()});
+            return reverse_iterator(begin());
         }
 
         reverse_iterator rbegin() {
-            return reverse_iterator({end()});
+            return reverse_iterator(end());
         }
 
         const_iterator cend() {
-            return {header.get()};
+            return const_iterator(header.get());
         }
 
         const_iterator cbegin() {
-            sus_ptr<Node> current = root;
-            while (current && current->left) {
-                current = current->left.get();
-            }
-            if (current) return {current};
+            sus_ptr<Node> current = firstNode();
+            if (current) return const_iterator(current);
             return cend();
         }
 
         const_reverse_iterator crend() {
-            return const_reverse_iterator({cbegin()});
+            return const_reverse_iterator(const_iterator(cbegin()));
         }
 
         const_reverse_iterator crbegin() {
-            return const_reverse_iterator({cend()});
+            return const_reverse_iterator(const_iterator(cend()));
         }
+        //</editor-fold>
     };
 }
