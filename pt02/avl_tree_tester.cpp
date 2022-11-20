@@ -1,10 +1,13 @@
-#include "./avl_tree.cpp"
+#define AVL_TREE_TESTING 1
+
+#include "./avl_tree.hpp"
 #include <set>
 #include <map>
 #include <iostream>
 #include <vector>
 #include <variant>
 #include <ctime>
+#include <source_location>
 
 using namespace stl;
 using namespace std;
