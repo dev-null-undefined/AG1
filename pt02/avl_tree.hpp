@@ -457,13 +457,14 @@ namespace stl {
              *                        parent
              *  parentDirection ->   /  |
              *                 Pivot    |
-             *                 /        |
-             *                /         ^ <- right
+             *                 /   \    |
+             *                /     \   ^
              *             node     rightSub
              *                       /  <- left
              *                      /
              *                     rightLeftSub
              */
+            pivotRaw->*right = nullptr;
             rightSub.get()->*left = std::unique_ptr<Node>(std::move(pivot));
             /*
              *                      parent
