@@ -12,12 +12,12 @@
 using namespace stl;
 using namespace std;
 
-std::normal_distribution<> distribution{10, 10};
+std::uniform_int_distribution<size_t> distribution{0, 1000};
 
 std::mt19937 * mt;
 
-int rng() {
-    return floor(distribution(*mt));
+size_t rng() {
+    return distribution(*mt);
 }
 
 int TEST_CONSTANT = 500;
@@ -97,70 +97,70 @@ void iterative_data_test_iterators(A b1, A e1, B b2, B e2, const string & test_n
 
 
 struct Tester {
-    std::unique_ptr<int> value = std::make_unique<int>();
+    size_t value;
 
-    Tester(int value) {
-        *this->value = value;
+    Tester(size_t value) {
+        this->value = value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C" << " : " << *this->value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "C" << " : " << this->value << Color::FG_DEFAULT << endl;
         }
     }
 
     Tester(const Tester & other) {
-        *this->value = *other.value;
+        this->value = other.value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C&" << " : " << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "C&" << " : " << value << Color::FG_DEFAULT << endl;
         }
     }
 
     Tester(Tester && other) noexcept {
-        *this->value = *other.value;
-        *other.value = -1;
+        this->value = other.value;
+        other.value = -1;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C&&" << " : " << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "C&&" << " : " << value << Color::FG_DEFAULT << endl;
         }
     }
 
     ~Tester() {
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "~" << " : " << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "~" << " : " << value << Color::FG_DEFAULT << endl;
         }
-        *value = -1;
+        value = -1;
     }
 
     Tester & operator=(const Tester & other) {
-        *this->value = *other.value;
+        this->value = other.value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "=&" << " : " << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "=&" << " : " << value << Color::FG_DEFAULT << endl;
         }
         return *this;
     }
 
     Tester & operator=(Tester && other) noexcept {
-        *this->value = *other.value;
-        *other.value = -1;
+        this->value = other.value;
+        other.value = -1;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "=&&" << " : " << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << "=&&" << " : " << value << Color::FG_DEFAULT << endl;
         }
         return *this;
     }
 
     bool operator<(const Tester & other) const {
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << *other.value << "<" << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << other.value << "<" << value << Color::FG_DEFAULT << endl;
         }
-        return *value < *other.value;
+        return value < other.value;
     }
 
     bool operator!=(const Tester & other) const {
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << *other.value << "!=" << *value << Color::FG_DEFAULT << endl;
+            cout << Color::FG_BLUE << other.value << "!=" << value << Color::FG_DEFAULT << endl;
         }
-        return *value != *other.value;
+        return value != other.value;
     }
 
     friend ostream & operator<<(ostream & os, const Tester & tester) {
-        return os << *tester.value;
+        return os << tester.value;
     }
 
     static bool ENABLE_PRINT;
@@ -187,9 +187,9 @@ void iterative_data_test(A a, B b, const string & test_name, bool reverse = fals
 }
 
 template<typename A, typename B>
-void insert_random(A a, B b, size_t count) {
+void insert_random(A & a, B & b, size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        int random = rng();
+        size_t random = rng();
         a.insert(random);
         b.emplace(random);
     }
