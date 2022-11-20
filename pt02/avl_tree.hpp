@@ -651,40 +651,56 @@ namespace stl {
         }
 
         //<editor-fold desc="Iterators">
-        iterator end() const {
-            return iterator(header.get());
-        }
-
-        iterator begin() const {
+        iterator begin() {
             sus_ptr<Node> current = firstNode();
             if (current) return iterator(current);
             return end();
         }
 
-        reverse_iterator rend() const {
-            return reverse_iterator(begin());
+        iterator end() {
+            return iterator(header.get());
         }
 
-        reverse_iterator rbegin() const {
-            return reverse_iterator(end());
+        const_iterator begin() const {
+            sus_ptr<Node> current = firstNode();
+            if (current) return const_iterator(current);
+            return end();
         }
 
-        const_iterator cend() const {
+        const_iterator end() const {
             return const_iterator(header.get());
         }
 
-        const_iterator cbegin() const {
-            sus_ptr<Node> current = firstNode();
-            if (current) return const_iterator(current);
-            return cend();
+        reverse_iterator rbegin() {
+            return reverse_iterator(end());
         }
 
-        const_reverse_iterator crend() const {
-            return const_reverse_iterator(const_iterator(cbegin()));
+        reverse_iterator rend() {
+            return reverse_iterator(begin());
+        }
+
+        const_reverse_iterator rbegin() const {
+            return const_reverse_iterator(end());
+        }
+
+        const_reverse_iterator rend() const {
+            return const_reverse_iterator(begin());
+        }
+
+        const_iterator cbegin() const {
+            return begin();
+        }
+
+        const_iterator cend() const {
+            return end();
         }
 
         const_reverse_iterator crbegin() const {
-            return const_reverse_iterator(const_iterator(cend()));
+            return const_reverse_iterator(end());
+        }
+
+        const_reverse_iterator crend() const {
+            return const_reverse_iterator(begin());
         }
         //</editor-fold>
     };
