@@ -408,6 +408,31 @@ void test_delete() {
     }
 }
 
+void test_random_access() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<Tester> int_tree;
+        set<Tester> int_tree_ref;
+        insert_random(int_tree, int_tree_ref, j);
+        for (int i = 0; i < j; ++i) {
+            size_t random = rng();
+            if (!int_tree_ref.empty()) {
+                auto test = int_tree[random % int_tree_ref.size()];
+                auto ref = std::next(int_tree_ref.begin(), random % int_tree_ref.size());
+
+                if (*test != *ref) {
+                    tests[test_name] = string_format("Non trivial %s != %s", toString(*test).c_str(),
+                                                     toString(*ref).c_str());
+                }
+                return;
+            }
+        }
+        if (iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name)) return;
+    }
+}
+
 
 int main() {
     std::random_device rd;
@@ -435,16 +460,19 @@ int main() {
     test_assign_copy();
     test_assign_move();
     test_delete();
+    test_random_access();
 
+    bool failed = false;
     for (auto & [key, error] : tests) {
         if (error) {
+            failed = true;
             cout << Color::FG_RED << "Failed: " << Color::FG_DEFAULT << key << ", Error: " << error.value() << endl;
         } else {
             cout << Color::FG_GREEN << "Pog: " << Color::FG_DEFAULT << key << endl;
         }
     }
-
-    return 0;
+    if (failed) std::cout << "Failed at least one!" << endl;
+    return failed;
 }
 
 
