@@ -94,6 +94,58 @@ namespace stl {
                 maxDepth = other.maxDepth;
             }
 
+            void moveData(Node & other) {
+                if (!other.is_real) {
+                    clear();
+                    return;
+                }
+                other.is_real = false;
+                other.data = nullptr;
+                if constexpr (std::is_trivially_move_assignable_v<value_type>) {
+                    if (is_real) {
+                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                        return;
+                    }
+                } else {
+                    clear();
+                }
+                data = reinterpret_cast<value_type *>(data_buffer);
+                is_real = true;
+                if constexpr (std::is_trivially_move_constructible_v<value_type>) {
+                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                } else {
+                    if constexpr (std::is_nothrow_move_constructible_v<value_type>) {
+                        new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
+                    } else {
+                        new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                    }
+                }
+            }
+
+
+            void copyData(const Node & other) {
+                if (!other.is_real) {
+                    clear();
+                    return;
+                }
+                data = reinterpret_cast<value_type *>(data_buffer);
+                if constexpr (std::is_trivially_copy_assignable_v<value_type>) {
+                    if (is_real) {
+                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                        return;
+                    }
+                } else {
+                    clear();
+                }
+                data = reinterpret_cast<value_type *>(data_buffer);
+                is_real = true;
+                if constexpr (std::is_trivially_copy_constructible_v<value_type>) {
+                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
+                } else {
+                    new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                }
+            }
+
             Node & operator=(const Node & other) {
                 if (&other == this) return *this;
                 left = nullptr;
@@ -106,25 +158,7 @@ namespace stl {
                     right = std::make_unique<Node>(unmove(*other.right));
                     right->parent = this;
                 }
-                if (!other.is_real) {
-                    clear();
-                    return *this;
-                }
-                data = reinterpret_cast<value_type *>(data_buffer);
-                if constexpr (std::is_trivially_copy_assignable_v<value_type>) {
-                    if (is_real) {
-                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
-                        return *this;
-                    }
-                } else {
-                    clear();
-                }
-                is_real = true;
-                if constexpr (std::is_trivially_copy_constructible_v<value_type>) {
-                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
-                } else {
-                    new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
-                }
+                copyData(other);
                 return *this;
             }
 
@@ -145,27 +179,7 @@ namespace stl {
                     clear();
                     return *this;
                 }
-                data = reinterpret_cast<value_type *>(data_buffer);
-                other.is_real = false;
-                other.data = nullptr;
-                if constexpr (std::is_trivially_move_assignable_v<value_type>) {
-                    if (is_real) {
-                        copy_array(other.data_buffer, data_buffer, sizeof(value_type));
-                        return *this;
-                    }
-                } else {
-                    clear();
-                }
-                is_real = true;
-                if constexpr (std::is_trivially_move_constructible_v<value_type>) {
-                    copy_array(other.data_buffer, data_buffer, sizeof(value_type));
-                } else {
-                    if constexpr (std::is_nothrow_move_constructible_v<value_type>) {
-                        new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
-                    } else {
-                        new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
-                    }
-                }
+                moveData(other);
                 return *this;
             }
 
@@ -238,6 +252,13 @@ namespace stl {
 
             bool isDescendant(descendant_ptr direction) {
                 return parent && (parent->*direction).get() == this;
+            }
+
+            descendant_ptr parentDirection() const {
+#if AVL_TREE_TESTING
+                assert(parent);
+#endif
+                return parent->left.get() == this ? left_ptr : right_ptr;
             }
         };
 
