@@ -562,11 +562,6 @@ namespace stl {
             return (parent->*parentDirection).get();
         }
 
-        difference_type minMax(difference_type value, difference_type min = -1, difference_type max = 1) {
-            return std::min(max, std::max(min, value));
-        }
-
-
         void updateUp(sus_ptr<Node> from) {
             value_reference value = *from->data;
 
@@ -601,6 +596,39 @@ namespace stl {
                     }
                 }
                 parent = current->parent;
+            }
+        }
+
+        void deleteNode(sus_ptr<Node> target) {
+            sus_ptr<Node> parent = target->parent;
+            if (target->left && target->right) {
+                iterator it{target};
+                if (target->left->maxDepth > target->right->maxDepth) {
+                    ++it;
+                } else {
+                    --it;
+                }
+                target->copyData(*it.current);
+                deleteNode(it.current);
+            } else {
+                std::unique_ptr<Node> child = std::move(target->left ? target->left : target->right);
+                descendant_ptr direction = target->parentDirection();
+
+                if (child) {
+                    child->parent = parent;
+                }
+                parent->*direction = std::move(child);
+                if (!parent->is_real) {
+                    root = parent->left.get();
+                } else {
+                    if (parent->*direction) {
+                        updateUp((parent->*direction).get());
+                    } else {
+//                        updateUp(parent);
+//                        if (parent->left)updateUp(parent->left.get());
+//                        if (parent->right)updateUp(parent->right.get());
+                    }
+                }
             }
         }
 
@@ -649,6 +677,17 @@ namespace stl {
             sus_ptr<Node> inserted = (result.node->*member_ptr).get();
             updateUp(inserted);
             return {inserted, true};
+        }
+
+        template<typename... M>
+        bool remove(M && ... arguments) {
+            value_type element(std::forward<M>(arguments)...);
+            avl_find_result result = inner_find(element);
+            if (result) {
+                deleteNode(result.node);
+                return true;
+            }
+            return false;
         }
 
         template<typename... M>
