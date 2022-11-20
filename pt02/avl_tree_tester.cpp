@@ -381,6 +381,34 @@ void test_find() {
     }
 }
 
+void test_delete() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<Tester> int_tree;
+        set<Tester> int_tree_ref;
+        vector<Tester> values;
+        insert_random(int_tree, int_tree_ref, j);
+        for (const auto & item : int_tree_ref) values.emplace_back(item);
+        for (size_t i = 0; i < j * 2; i++) {
+            Tester element = values[rand() % values.size()];
+            if (int_tree_ref.count(element)) {
+                if (!int_tree.count(element)) {
+                    tests[test_name] = "Didn't find element in tree";
+                    return;
+                }
+                int_tree.remove(element);
+                int_tree_ref.erase(element);
+            } else if (int_tree.count(element)) {
+                tests[test_name] = "Didn't delete element in tree";
+            }
+        }
+        if (iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name)) return;
+    }
+}
+
+
 int main() {
     std::random_device rd;
     mt = new std::mt19937(rd());
@@ -406,6 +434,7 @@ int main() {
     test_move();
     test_assign_copy();
     test_assign_move();
+    test_delete();
 
     for (auto & [key, error] : tests) {
         if (error) {
