@@ -628,6 +628,11 @@ namespace stl {
                 target->copyData(*it.current);
                 deleteNode(it.current);
             } else {
+                sus_ptr<Node> ptr = target;
+                while (ptr->is_real) {
+                    ptr->count--;
+                    ptr = ptr->parent;
+                }
                 std::unique_ptr<Node> child = std::move(target->left ? target->left : target->right);
                 descendant_ptr direction = target->parentDirection();
 
@@ -708,11 +713,6 @@ namespace stl {
             value_type element(std::forward<M>(arguments)...);
             avl_find_result result = inner_find(element);
             if (result) {
-                sus_ptr<Node> ptr = result.node;
-                while (ptr->is_real) {
-                    ptr->count--;
-                    ptr = ptr->parent;
-                }
                 deleteNode(result.node);
                 return true;
             }
