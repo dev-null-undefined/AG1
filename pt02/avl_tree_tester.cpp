@@ -8,11 +8,20 @@
 #include <variant>
 #include <ctime>
 #include <source_location>
+#include <random>
 
 using namespace stl;
 using namespace std;
 
-int TEST_CONSTANT = 100;
+std::normal_distribution<> distribution{10, 10};
+
+std::mt19937 * mt;
+
+auto rng() {
+    return floor(distribution(*mt));
+}
+
+int TEST_CONSTANT = 500;
 
 enum Color {
     FG_RED = 31,
@@ -44,7 +53,7 @@ std::string string_format(const std::string & format, Args ... args) {
     auto size = static_cast<size_t>( size_s );
     std::unique_ptr<char[]> buf(new char[size]);
     std::snprintf(buf.get(), size, format.c_str(), args ...);
-    return string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+    return {buf.get(), buf.get() + size - 1}; // We don't want the '\0' inside
 }
 
 template<typename T>
@@ -113,7 +122,7 @@ void test_iterators() {
         AVLTree<int> int_tree;
         set<int> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.emplace(random);
         }
@@ -130,7 +139,7 @@ void test_reverse_iterators() {
         AVLTree<int> int_tree;
         set<int> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.emplace(random);
         }
@@ -146,7 +155,7 @@ void test_const_iterators() {
         AVLTree<int> int_tree;
         set<int> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.emplace(random);
         }
@@ -162,7 +171,7 @@ void test_const_reverse_iterators() {
         AVLTree<int> int_tree;
         set<int> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.emplace(random);
         }
@@ -252,14 +261,14 @@ void test_copy() {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.insert(random);
         }
         AVLTree<Tester> int_tree_copy(int_tree);
         set<Tester> int_tree_copy_ref(int_tree_ref);
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree_copy.insert(random);
             int_tree_copy_ref.insert(random);
         }
@@ -277,7 +286,7 @@ void test_move() {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.insert(random);
         }
@@ -286,7 +295,7 @@ void test_move() {
         set<Tester> int_tree_copy_ref(std::move(int_tree_ref));
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree_copy.insert(random);
             int_tree_copy_ref.insert(random);
         }
@@ -303,7 +312,7 @@ void test_assign_move() {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.insert(random);
         }
@@ -312,7 +321,7 @@ void test_assign_move() {
         set<Tester> int_tree_copy_ref;
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree_copy.insert(random);
             int_tree_copy_ref.insert(random);
         }
@@ -331,7 +340,7 @@ void test_assign_copy() {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.insert(random);
         }
@@ -339,7 +348,7 @@ void test_assign_copy() {
         AVLTree<Tester> int_tree_copy;
         set<Tester> int_tree_copy_ref;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree_copy.insert(random);
             int_tree_copy_ref.insert(random);
         }
@@ -350,7 +359,7 @@ void test_assign_copy() {
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree_copy.insert(random);
             int_tree_copy_ref.insert(random);
         }
@@ -364,7 +373,7 @@ int inner_count_test(const std::vector<Tester> & values, const std::set<Tester> 
     string test_name = "find";
     if (values.empty()) return 0;
     for (int i = 0; i < TEST_CONSTANT; ++i) {
-        int random = std::rand();
+        int random = rng();
         const Tester & find = values[random % values.size()];
         unsigned long a = tree.count(find);
         unsigned long b = tree_ref.count(find);
@@ -397,7 +406,7 @@ void test_find() {
         set<Tester> int_tree_ref;
         vector<Tester> values;
         for (int i = 0; i < j; ++i) {
-            int random = std::rand();
+            int random = rng();
             int_tree.insert(random);
             int_tree_ref.insert(random);
             values.emplace_back(random);
@@ -411,12 +420,14 @@ void test_find() {
 }
 
 int main() {
-    std::srand(std::time(nullptr));
+    std::random_device rd;
+    mt = new std::mt19937(rd());
+
     using namespace stl;
     using namespace std;
 //    AVLTree<int> compileall;
-//    for (int i = 0; i < 20; ++i) {
-//        compileall.insert(rand() % 20);
+//    for (int i = 0; i < 200; ++i) {
+//        compileall.insert(rng());
 //        compileall.toGraphViz(string_format("grapth%d.dot", i));
 //    }
 
