@@ -220,6 +220,16 @@ namespace stl {
                 return *data;
             }
 
+            size_type leftCount() {
+                if (left) return left->count;
+                return 0;
+            }
+
+            size_type rightCount() {
+                if (right) return right->count;
+                return 0;
+            }
+
             void clear() {
                 if (is_real) {
                     data->~value_type();
@@ -239,7 +249,8 @@ namespace stl {
             sus_ptr<Node> parent = nullptr;
             std::unique_ptr<Node> left = nullptr;
             std::unique_ptr<Node> right = nullptr;
-            difference_type maxDepth = 1; // TODO: <--- this
+            difference_type maxDepth = 1;
+            size_type count = 0;
             bool is_real = false;
 
 
@@ -437,6 +448,7 @@ namespace stl {
             header->left = std::make_unique<Node>(std::move(data));
             root = header->left.get();
             root->parent = header.get();
+            root->count = 1;
             return root;
         }
 
@@ -539,6 +551,11 @@ namespace stl {
              */
             pivotRaw->updateMaxDepth();
             rightSub->updateMaxDepth();
+
+            pivotRaw->count -= 1;
+            if (rightSub.get()->*right) pivotRaw->count -= (rightSub.get()->*right)->count;
+            rightSub->count += 1;
+            if (pivotRaw->*left) rightSub->count += (pivotRaw->*left)->count;
 
             parent->*parentDirection = std::unique_ptr<Node>(std::move(rightSub));
             if (!parent->is_real) {
@@ -675,6 +692,13 @@ namespace stl {
             result.node->*member_ptr = std::make_unique<Node>(std::move(element), result.node);
 
             sus_ptr<Node> inserted = (result.node->*member_ptr).get();
+
+            sus_ptr<Node> ptr = inserted;
+            while (ptr->is_real) {
+                ptr->count++;
+                ptr = ptr->parent;
+            }
+
             updateUp(inserted);
             return {inserted, true};
         }
@@ -684,10 +708,30 @@ namespace stl {
             value_type element(std::forward<M>(arguments)...);
             avl_find_result result = inner_find(element);
             if (result) {
+                sus_ptr<Node> ptr = result.node;
+                while (ptr->is_real) {
+                    ptr->count--;
+                    ptr = ptr->parent;
+                }
                 deleteNode(result.node);
                 return true;
             }
             return false;
+        }
+
+        iterator operator[](size_type index) {
+            index++;
+            if (index > root->count) return end();
+            sus_ptr<Node> current = root;
+            while (current->leftCount() + 1 != index) {
+                if (current->count > index) {
+                    current = current->left.get();
+                } else {
+                    index -= current->leftCount() + 1;
+                    current = current->right.get();
+                }
+            }
+            return iterator(current);
         }
 
         template<typename... M>
