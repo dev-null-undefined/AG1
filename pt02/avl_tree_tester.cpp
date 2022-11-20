@@ -2,7 +2,6 @@
 
 #include "./avl_tree.hpp"
 #include <set>
-#include <map>
 #include <iostream>
 #include <vector>
 #include <variant>
@@ -17,7 +16,7 @@ std::normal_distribution<> distribution{10, 10};
 
 std::mt19937 * mt;
 
-auto rng() {
+int rng() {
     return floor(distribution(*mt));
 }
 
@@ -96,88 +95,6 @@ void iterative_data_test_iterators(A b1, A e1, B b2, B e2, const string & test_n
     }
 }
 
-template<typename A, typename B>
-void iterative_data_test(A a, B b, const string & test_name, bool reverse = false) {
-    if (!reverse) {
-        if constexpr (std::is_const_v<std::remove_reference_t<A>>) {
-            iterative_data_test_iterators(a.cbegin(), a.cend(), b.cbegin(), b.cend(), test_name);
-        } else {
-            iterative_data_test_iterators(a.begin(), a.end(), b.begin(), b.end(), test_name);
-        }
-    } else {
-        if constexpr (std::is_const_v<std::remove_reference_t<A>>) {
-            iterative_data_test_iterators(a.crbegin(), a.crend(), b.crbegin(), b.crend(), test_name);
-        } else {
-            iterative_data_test_iterators(a.rbegin(), a.rend(), b.rbegin(), b.rend(), test_name);
-        }
-    }
-
-}
-
-void test_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (int j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<int> int_tree;
-        set<int> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.emplace(random);
-        }
-        iterative_data_test<AVLTree<int> &>(int_tree, int_tree_ref, test_name);
-    }
-}
-
-
-void test_reverse_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (int j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<int> int_tree;
-        set<int> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.emplace(random);
-        }
-        iterative_data_test<AVLTree<int> &>(int_tree, int_tree_ref, test_name, true);
-    }
-}
-
-void test_const_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (int j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<int> int_tree;
-        set<int> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.emplace(random);
-        }
-        iterative_data_test<const AVLTree<int> &, const std::set<int> &>(int_tree, int_tree_ref, test_name);
-    }
-}
-
-void test_const_reverse_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (int j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<int> int_tree;
-        set<int> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.emplace(random);
-        }
-        iterative_data_test<const AVLTree<int> &, const std::set<int> &>(int_tree, int_tree_ref, test_name, true);
-    }
-}
 
 struct Tester {
     std::unique_ptr<int> value = std::make_unique<int>();
@@ -196,7 +113,7 @@ struct Tester {
         }
     }
 
-    Tester(Tester && other) {
+    Tester(Tester && other) noexcept {
         *this->value = *other.value;
         *other.value = -1;
         if (ENABLE_PRINT) {
@@ -219,7 +136,7 @@ struct Tester {
         return *this;
     }
 
-    Tester & operator=(Tester && other) {
+    Tester & operator=(Tester && other) noexcept {
         *this->value = *other.value;
         *other.value = -1;
         if (ENABLE_PRINT) {
@@ -252,6 +169,82 @@ struct Tester {
 bool Tester::ENABLE_PRINT = false;
 
 
+template<typename A, typename B>
+void iterative_data_test(A a, B b, const string & test_name, bool reverse = false) {
+    if (!reverse) {
+        if constexpr (std::is_const_v<std::remove_reference_t<A>>) {
+            iterative_data_test_iterators(a.cbegin(), a.cend(), b.cbegin(), b.cend(), test_name);
+        } else {
+            iterative_data_test_iterators(a.begin(), a.end(), b.begin(), b.end(), test_name);
+        }
+    } else {
+        if constexpr (std::is_const_v<std::remove_reference_t<A>>) {
+            iterative_data_test_iterators(a.crbegin(), a.crend(), b.crbegin(), b.crend(), test_name);
+        } else {
+            iterative_data_test_iterators(a.rbegin(), a.rend(), b.rbegin(), b.rend(), test_name);
+        }
+    }
+}
+
+template<typename A, typename B>
+void insert_random(A a, B b, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        int random = rng();
+        a.insert(random);
+        b.emplace(random);
+    }
+}
+
+void test_iterators() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<int> int_tree;
+        set<int> int_tree_ref;
+        insert_random(int_tree, int_tree_ref, j);
+        iterative_data_test<AVLTree<int> &>(int_tree, int_tree_ref, test_name);
+    }
+}
+
+
+void test_reverse_iterators() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<int> int_tree;
+        set<int> int_tree_ref;
+        insert_random(int_tree, int_tree_ref, j);
+        iterative_data_test<AVLTree<int> &>(int_tree, int_tree_ref, test_name, true);
+    }
+}
+
+void test_const_iterators() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<int> int_tree;
+        set<int> int_tree_ref;
+        insert_random(int_tree, int_tree_ref, j);
+        iterative_data_test<const AVLTree<int> &, const std::set<int> &>(int_tree, int_tree_ref, test_name);
+    }
+}
+
+void test_const_reverse_iterators() {
+    string test_name = std::source_location::current().function_name();
+    cout << "Testing now: " << test_name << endl;
+    tests[test_name] = std::optional<std::string>();
+    for (int j = 0; j < TEST_CONSTANT; ++j) {
+        AVLTree<int> int_tree;
+        set<int> int_tree_ref;
+        insert_random(int_tree, int_tree_ref, j);
+        iterative_data_test<const AVLTree<int> &, const std::set<int> &>(int_tree, int_tree_ref, test_name, true);
+    }
+}
+
+
 void test_copy() {
     Tester::ENABLE_PRINT = false;
     string test_name = std::source_location::current().function_name();
@@ -260,18 +253,10 @@ void test_copy() {
     for (int j = 0; j < TEST_CONSTANT; ++j) {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.insert(random);
-        }
+        insert_random(int_tree, int_tree_ref, j);
         AVLTree<Tester> int_tree_copy(int_tree);
         set<Tester> int_tree_copy_ref(int_tree_ref);
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree_copy.insert(random);
-            int_tree_copy_ref.insert(random);
-        }
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
     }
@@ -285,20 +270,12 @@ void test_move() {
     for (int j = 0; j < TEST_CONSTANT; ++j) {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.insert(random);
-        }
+        insert_random(int_tree, int_tree_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         AVLTree<Tester> int_tree_copy(std::move(int_tree));
         set<Tester> int_tree_copy_ref(std::move(int_tree_ref));
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree_copy.insert(random);
-            int_tree_copy_ref.insert(random);
-        }
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
     }
 }
@@ -311,22 +288,16 @@ void test_assign_move() {
     for (int j = 0; j < TEST_CONSTANT; ++j) {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.insert(random);
-        }
+        insert_random(int_tree, int_tree_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         AVLTree<Tester> int_tree_copy;
         set<Tester> int_tree_copy_ref;
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree_copy.insert(random);
-            int_tree_copy_ref.insert(random);
-        }
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         int_tree_copy = std::move(int_tree);
         int_tree_copy_ref = std::move(int_tree_ref);
+        iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
     }
 }
@@ -339,30 +310,18 @@ void test_assign_copy() {
     for (int j = 0; j < TEST_CONSTANT; ++j) {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.insert(random);
-        }
+        insert_random(int_tree, int_tree_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         AVLTree<Tester> int_tree_copy;
         set<Tester> int_tree_copy_ref;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree_copy.insert(random);
-            int_tree_copy_ref.insert(random);
-        }
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
         int_tree = int_tree_copy;
         int_tree_ref = int_tree_copy_ref;
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree_copy.insert(random);
-            int_tree_copy_ref.insert(random);
-        }
+        insert_random(int_tree_copy, int_tree_copy_ref, j);
         iterative_data_test<AVLTree<Tester> &>(int_tree, int_tree_ref, test_name);
         iterative_data_test<AVLTree<Tester> &>(int_tree_copy, int_tree_copy_ref, test_name);
     }
@@ -405,12 +364,8 @@ void test_find() {
         AVLTree<Tester> int_tree;
         set<Tester> int_tree_ref;
         vector<Tester> values;
-        for (int i = 0; i < j; ++i) {
-            int random = rng();
-            int_tree.insert(random);
-            int_tree_ref.insert(random);
-            values.emplace_back(random);
-        }
+        insert_random(int_tree, int_tree_ref, j);
+        for (const auto & item : int_tree_ref) values.emplace_back(item);
         DoNotOptimize(int_tree);
         DoNotOptimize(int_tree_ref);
         DoNotOptimize(values);
