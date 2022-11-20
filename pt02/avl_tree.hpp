@@ -451,7 +451,7 @@ namespace stl {
         sus_ptr<Node> rotate(sus_ptr<Node> toRotate, descendant_ptr direction) {
             descendant_ptr right = direction == Node::left_ptr ? Node::right_ptr : Node::left_ptr;
             descendant_ptr left = direction;
-            descendant_ptr parentDirection = toRotate->isDescendant(Node::left_ptr) ? Node::left_ptr : Node::right_ptr;
+            descendant_ptr parentDirection = toRotate->parentDirection();
             sus_ptr<Node> parent = toRotate->parent;
 #ifdef AVL_TREE_TESTING
             assert(toRotate->isDescendant(parentDirection));
@@ -574,30 +574,21 @@ namespace stl {
             sus_ptr<Node> parent = current->parent;
 
             while (parent->is_real && parent->parent) {
-
-                difference_type depth = current->maxDepth + 1;
-
-                bool updated = false;
-
-                if (parent->maxDepth < depth) {
-                    updated = true;
-                    parent->maxDepth = depth;
-                }
+                difference_type before = parent->maxDepth;
+                parent->updateMaxDepth();
 
                 difference_type parentSign = parent->sign();
                 difference_type sign = current->sign();
 
-                bool doubleRotate = minMax(parentSign) != minMax(sign);
-
                 if (parentSign < -1) {
-                    if (doubleRotate) {
+                    if (sign > 0) {
                         rotate(current, Node::left_ptr);
                         current = rotate(parent, Node::right_ptr);
                     } else {
                         current = rotate(parent, Node::right_ptr);
                     }
                 } else if (parentSign > 1) {
-                    if (doubleRotate) {
+                    if (sign < 0) {
                         rotate(current, Node::right_ptr);
                         current = rotate(parent, Node::left_ptr);
                     } else {
@@ -605,7 +596,7 @@ namespace stl {
                     }
                 } else {
                     current = parent;
-                    if (!updated) {
+                    if (before == parent->maxDepth) {
                         break;
                     }
                 }
