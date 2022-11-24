@@ -329,7 +329,7 @@ void testbed(const Function & test, const source_location & location) {
     cout << "Testing now: " << test_name << endl;
     tests[test_name] = std::optional<std::string>();
     Tester::disable_stat = true;
-    for (size_t j = TEST_CONSTANT - 1; j < TEST_CONSTANT; ++j) {
+    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
         if (j == TEST_CONSTANT - 1) {
             Tester::disable_stat = false;
             Tester::reset();
@@ -353,11 +353,26 @@ void testbed(const Function & test, const source_location & location) {
     Tester::ENABLE_PRINT = 0;
 }
 
-void test_iterators() {
+void test_insert() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
         insert_random(a, b, i);
+        Tester::disable_stat = true;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        return true;
+    }, std::source_location::current());
+}
+
+
+void test_iterators() {
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
+        insert_random(a, b, i);
+        Tester::disable_stat = before;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         Tester::disable_stat = true;
         return true;
@@ -369,7 +384,10 @@ void test_reverse_iterators() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
+        Tester::disable_stat = before;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name, true)) return false;
         Tester::disable_stat = true;
         return true;
@@ -380,7 +398,10 @@ void test_const_iterators() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
+        Tester::disable_stat = before;
         if (!iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(a, b, test_name)) return false;
         Tester::disable_stat = true;
         return true;
@@ -391,7 +412,10 @@ void test_const_reverse_iterators() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
+        Tester::disable_stat = before;
         if (!iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(a, b, test_name, true))
             return false;
         Tester::disable_stat = true;
@@ -404,16 +428,19 @@ void test_copy() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
+        Tester::disable_stat = before;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         Tester::set_ref(false);
         AVLTree<Tester> a_copy(a);
         Tester::set_ref(true);
         set<Tester> b_copy(b);
+        Tester::disable_stat = true;
         insert_random(a_copy, b_copy, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
-        Tester::disable_stat = true;
         return true;
     }, std::source_location::current());
 }
@@ -422,6 +449,8 @@ void test_move() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
 
@@ -432,13 +461,14 @@ void test_move() {
         insert_random(a_copy, b_copy, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
+        Tester::disable_stat = before;
         Tester::set_ref(false);
         AVLTree<Tester> a_move(std::move(a_copy));
         Tester::set_ref(true);
         set<Tester> b_move(std::move(b_copy));
+        Tester::disable_stat = true;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
-        Tester::disable_stat = true;
         return true;
     }, std::source_location::current());
 }
@@ -447,6 +477,8 @@ void test_assign_move() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         Tester::set_ref(false);
@@ -461,16 +493,16 @@ void test_assign_move() {
         set<Tester> b_move;
         insert_random(a_move, b_move, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
+        Tester::disable_stat = before;
         Tester::set_ref(false);
         a_move = std::move(a_copy);
         Tester::set_ref(true);
         b_move = std::move(b_copy);
+        Tester::disable_stat = true;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
-        Tester::disable_stat = true;
         if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b, b_move, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a, a_move, test_name)) return false;
-        Tester::disable_stat = true;
         return true;
     }, std::source_location::current());
 }
@@ -479,6 +511,8 @@ void test_assign_copy() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         Tester::set_ref(false);
@@ -493,20 +527,19 @@ void test_assign_copy() {
         set<Tester> b_help;
         insert_random(a_help, b_help, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
+        Tester::disable_stat = before;
         Tester::set_ref(false);
         a_help = a;
         Tester::set_ref(true);
         b_help = b;
+        Tester::disable_stat = true;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
-        Tester::disable_stat = true;
         if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b, b_help, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a, a_help, test_name)) return false;
-        Tester::disable_stat = false;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
-        Tester::disable_stat = true;
         if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b_copy, b_help, test_name)) return false;
         if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a_copy, a_help, test_name)) return false;
         return true;
@@ -561,15 +594,15 @@ void test_find() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         std::vector<Tester> values;
         for (const Tester & t : b) {
-            bool before = Tester::disable_stat;
-            Tester::disable_stat = true;
             values.push_back(t);
-            Tester::disable_stat = before;
         }
+        Tester::disable_stat = before;
         if (!inner_count_test(values, b, a)) return false;
         Tester::disable_stat = true;
         return true;
@@ -580,22 +613,23 @@ void test_delete() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
         std::vector<Tester> values;
         for (const Tester & t : b) {
-            bool before = Tester::disable_stat;
-            Tester::disable_stat = true;
             values.push_back(t);
-            Tester::disable_stat = before;
         }
         for (size_t j = 0; j < i * 2; ++j) {
             size_t random = rng();
             const Tester & find = values[random % values.size()];
             Tester::set_ref(false);
+            Tester::disable_stat = before;
             bool remove_a = a.remove(find);
             Tester::set_ref(true);
             size_t remove_b = b.erase(find);
+            Tester::disable_stat = true;
             if (remove_a != remove_b) {
                 tests[test_name] = string_format("remove tree(%d) != ref(%d)", remove_a, remove_b);
                 return false;
@@ -612,6 +646,8 @@ void test_random_access() {
     testbed([](size_t i, const string & test_name) {
         AVLTree<Tester> a;
         set<Tester> b;
+        bool before = Tester::disable_stat;
+        Tester::disable_stat = true;
         insert_random(a, b, i);
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
 
@@ -620,19 +656,17 @@ void test_random_access() {
 
             unsigned long size = b.size();
             if (!b.empty()) {
+                Tester::disable_stat = before;
                 Tester::set_ref(false);
                 auto test = a[random % size];
                 Tester::set_ref(true);
                 auto ref = std::next(b.begin(), (long) (random % size));
-
-                bool before = Tester::disable_stat;
                 Tester::disable_stat = true;
                 if (*test != *ref) {
                     tests[test_name] = string_format("Non trivial %s != %s", toString(*test).c_str(),
                                                      toString(*ref).c_str());
                     return false;
                 }
-                Tester::disable_stat = before;
             }
         }
         if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
@@ -658,7 +692,7 @@ int main() {
 //        compileall.toGraphViz(string_format("grapth%d.dot", i));
 //    }
 
-    test_find();
+    test_insert();
     test_iterators();
     test_reverse_iterators();
     test_const_iterators();
@@ -667,6 +701,7 @@ int main() {
     test_move();
     test_assign_copy();
     test_assign_move();
+    test_find();
     test_delete();
     test_random_access();
 
@@ -682,5 +717,3 @@ int main() {
     if (failed) std::cout << "Failed at least one!" << endl;
     return failed;
 }
-
-
