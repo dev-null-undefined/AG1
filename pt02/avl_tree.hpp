@@ -28,10 +28,6 @@ namespace stl {
         }
     }
 
-    template<class T>
-    T & unmove(T && t) {
-        return t;
-    }
 
 #if __cplusplus >= 202002L
 
@@ -72,16 +68,6 @@ namespace stl {
       private:
 
         struct Node {
-            explicit Node(value_type & data, Node * parent = nullptr) : data(
-                    reinterpret_cast<value_type *>(data_buffer)), parent(parent), is_real(true) {
-                new(static_cast<void *>(data_buffer)) value_type(data);
-            }
-
-            explicit Node(value_type && data, Node * parent = nullptr) : data(
-                    reinterpret_cast<value_type *>(data_buffer)), parent(parent), is_real(true) {
-                new(static_cast<void *>(data_buffer)) value_type(std::move(data));
-            }
-
             Node() = default;
 
             Node(const Node & other) {
@@ -93,6 +79,15 @@ namespace stl {
                 *this = other;
                 maxDepth = other.maxDepth;
             }
+
+            template<typename... M>
+            void construct(M && ... args) {
+                clear();
+                data = reinterpret_cast<value_type *>(data_buffer);
+                is_real = true;
+                new(data) value_type(std::forward<M>(args)...);
+            }
+
 
             void moveData(Node & other) {
                 if (!other.is_real) {
@@ -117,7 +112,7 @@ namespace stl {
                     if constexpr (std::is_nothrow_move_constructible_v<value_type>) {
                         new(static_cast<void *>(data_buffer)) value_type(std::move(*other.data));
                     } else {
-                        new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                        new(static_cast<void *>(data_buffer)) value_type(*other.data);
                     }
                 }
             }
@@ -142,7 +137,7 @@ namespace stl {
                 if constexpr (std::is_trivially_copy_constructible_v<value_type>) {
                     copy_array(other.data_buffer, data_buffer, sizeof(value_type));
                 } else {
-                    new(static_cast<void *>(data_buffer)) value_type(unmove(*other.data));
+                    new(static_cast<void *>(data_buffer)) value_type(*other.data);
                 }
             }
 
@@ -150,12 +145,12 @@ namespace stl {
                 if (&other == this) return *this;
                 left = nullptr;
                 if (other.left) {
-                    left = std::make_unique<Node>(unmove(*other.left));
+                    left = std::make_unique<Node>(*other.left);
                     left->parent = this;
                 }
                 right = nullptr;
                 if (other.right) {
-                    right = std::make_unique<Node>(unmove(*other.right));
+                    right = std::make_unique<Node>(*other.right);
                     right->parent = this;
                 }
                 copyData(other);
@@ -444,8 +439,8 @@ namespace stl {
             return {current, CompareResult::none};
         }
 
-        sus_ptr<Node> setRoot(value_type && data) {
-            header->left = std::make_unique<Node>(std::move(data));
+        sus_ptr<Node> setRoot(std::unique_ptr<Node> && data) {
+            header->left = std::move(data);
             root = header->left.get();
             root->parent = header.get();
             root->count = 1;
@@ -670,31 +665,35 @@ namespace stl {
 
         AVLTree & operator=(const AVLTree & other) {
             if (&other == this) return *this;
-            header = std::make_unique<Node>(unmove(*other.header));
+            header = std::make_unique<Node>(*other.header);
             root = header->left.get();
             return *this;
         }
 
         AVLTree & operator=(AVLTree && other) {
             if (&other == this) return *this;
-            header = std::make_unique<Node>(std::move(*other.header));
+            header = std::move(other.header);
             root = header->left.get();
+            other.root = nullptr;
             return *this;
         }
 
 
         template<typename... M>
         insert_result insert(M && ... arguments) {
-            value_type element(std::forward<M>(arguments)...);
-            avl_find_result result = inner_find(element);
+            std::unique_ptr<Node> node = std::make_unique<Node>();
+            node->construct(std::forward<M>(arguments)...);
+
+            avl_find_result result = inner_find(node->dataRef());
             if (result) return {result.node, false};
             if (result.compare == CompareResult::none) {
-                setRoot(std::move(element));
+                setRoot(std::move(node));
                 return {root, true};
             }
 
             descendant_ptr member_ptr = compare(result.compare);
-            result.node->*member_ptr = std::make_unique<Node>(std::move(element), result.node);
+            result.node->*member_ptr = std::move(node);
+            (result.node->*member_ptr)->parent = result.node;
 
             sus_ptr<Node> inserted = (result.node->*member_ptr).get();
 
