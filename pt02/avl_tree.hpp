@@ -665,7 +665,7 @@ namespace stl {
         }
 
         AVLTree(AVLTree && other) {
-            *this = other;
+            *this = std::move(other);
         }
 
         AVLTree & operator=(const AVLTree & other) {
