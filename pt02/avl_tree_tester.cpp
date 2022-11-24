@@ -22,18 +22,40 @@ size_t rng() {
 
 int TEST_CONSTANT = 1000;
 
-enum Color {
-    FG_RED = 31,
-    FG_GREEN = 32,
-    FG_BLUE = 34,
-    FG_DEFAULT = 39,
-    BG_RED = 41,
-    BG_GREEN = 42,
-    BG_BLUE = 44,
-    BG_DEFAULT = 49
-};
+namespace Color {
+    namespace FG {
+        enum Code {
+            DEFAULT = 39,
+            RED = 31,
+            GREEN = 32,
+            BLUE = 34,
+            CYAN = 36,
+            YELLOW = 33,
+            MAGENTA = 35,
+            BLACK = 30,
+            WHITE = 37,
+        };
+    }
+    namespace BG {
+        enum Code {
+            DEFAULT = 49,
+            RED = 41,
+            GREEN = 42,
+            BLUE = 44,
+            CYAN = 46,
+            YELLOW = 43,
+            MAGENTA = 45,
+            BLACK = 40,
+            WHITE = 47,
+        };
+    }
+}
 
-std::ostream & operator<<(std::ostream & os, const Color & mod) {
+std::ostream & operator<<(std::ostream & os, const Color::FG::Code & mod) {
+    return os << "\033[" << std::to_string((int) mod) << "m";
+}
+
+std::ostream & operator<<(std::ostream & os, const Color::BG::Code & mod) {
     return os << "\033[" << std::to_string((int) mod) << "m";
 }
 
@@ -107,14 +129,14 @@ struct Tester {
     Tester(size_t value) {
         this->value = value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C" << " : " << this->value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::GREEN << "C: " << this->value << Color::FG::DEFAULT << endl;
         }
     }
 
     Tester(const Tester & other) {
         this->value = other.value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C&" << " : " << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::BLUE << "C&: " << value << Color::FG::DEFAULT << endl;
         }
     }
 
@@ -122,13 +144,13 @@ struct Tester {
         this->value = other.value;
         other.value = -1;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "C&&" << " : " << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::CYAN << "C&&: " << value << Color::FG::DEFAULT << endl;
         }
     }
 
     ~Tester() {
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "~" << " : " << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::RED << "~: " << value << Color::FG::DEFAULT << endl;
         }
         value = -1;
     }
@@ -136,7 +158,7 @@ struct Tester {
     Tester & operator=(const Tester & other) {
         this->value = other.value;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "=&" << " : " << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::BLUE << "=&: " << value << Color::FG::DEFAULT << endl;
         }
         return *this;
     }
@@ -145,22 +167,20 @@ struct Tester {
         this->value = other.value;
         other.value = -1;
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << "=&&" << " : " << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::CYAN << "=&&: " << value << Color::FG::DEFAULT << endl;
         }
         return *this;
     }
 
     bool operator<(const Tester & other) const {
         if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << other.value << "<" << value << Color::FG_DEFAULT << endl;
+            cout << Color::FG::MAGENTA << other.value << "<" << value << Color::FG::DEFAULT << endl;
         }
         return value < other.value;
     }
 
+    // only used for checking if the tree is correct
     bool operator!=(const Tester & other) const {
-        if (ENABLE_PRINT) {
-            cout << Color::FG_BLUE << other.value << "!=" << value << Color::FG_DEFAULT << endl;
-        }
         return value != other.value;
     }
 
@@ -361,7 +381,6 @@ int inner_count_test(const std::vector<Tester> & values, const std::set<Tester> 
     return 0;
 }
 
-
 void test_find() {
     Tester::ENABLE_PRINT = false;
     string test_name = std::source_location::current().function_name();
@@ -466,9 +485,9 @@ int main() {
     for (auto & [key, error] : tests) {
         if (error) {
             failed = true;
-            cout << Color::FG_RED << "Failed: " << Color::FG_DEFAULT << key << ", Error: " << error.value() << endl;
+            cout << Color::FG::RED << "Failed: " << Color::FG::DEFAULT << key << ", Error: " << error.value() << endl;
         } else {
-            cout << Color::FG_GREEN << "Pog: " << Color::FG_DEFAULT << key << endl;
+            cout << Color::FG::GREEN << "Pog: " << Color::FG::DEFAULT << key << endl;
         }
     }
     if (failed) std::cout << "Failed at least one!" << endl;
