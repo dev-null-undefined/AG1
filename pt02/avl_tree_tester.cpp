@@ -122,11 +122,57 @@ bool iterative_data_test_iterators(A b1, A e1, B b2, B e2, const string & test_n
     return false;
 }
 
+struct Stat {
+
+    size_t constructor_count;
+    size_t destructor_count;
+    size_t copy_constructor_count;
+    size_t move_constructor_count;
+    size_t copy_assignment_count;
+    size_t move_assignment_count;
+    size_t operator_less_count;
+
+    Stat() {
+        constructor_count = 0;
+        destructor_count = 0;
+        copy_constructor_count = 0;
+        move_constructor_count = 0;
+        copy_assignment_count = 0;
+        move_assignment_count = 0;
+        operator_less_count = 0;
+    }
+
+    Stat & operator+=(const Stat & other) {
+        constructor_count += other.constructor_count;
+        destructor_count += other.destructor_count;
+        copy_constructor_count += other.copy_constructor_count;
+        move_constructor_count += other.move_constructor_count;
+        copy_assignment_count += other.copy_assignment_count;
+        move_assignment_count += other.move_assignment_count;
+        operator_less_count += other.operator_less_count;
+        return *this;
+    }
+
+    void print() {
+        cout << "constructor_count: " << constructor_count << endl;
+        cout << "destructor_count: " << destructor_count << endl;
+        cout << "copy_constructor_count: " << copy_constructor_count << endl;
+        cout << "move_constructor_count: " << move_constructor_count << endl;
+        cout << "copy_assignment_count: " << copy_assignment_count << endl;
+        cout << "move_assignment_count: " << move_assignment_count << endl;
+        cout << "operator_less_count: " << operator_less_count << endl;
+    }
+
+};
+
 
 struct Tester {
     size_t value;
+    static Stat stat;
+
 
     Tester(size_t value) {
+        stat.constructor_count++;
         this->value = value;
         if (ENABLE_PRINT) {
             cout << Color::FG::GREEN << "C: " << this->value << Color::FG::DEFAULT << endl;
@@ -134,6 +180,7 @@ struct Tester {
     }
 
     Tester(const Tester & other) {
+        stat.copy_constructor_count++;
         this->value = other.value;
         if (ENABLE_PRINT) {
             cout << Color::FG::BLUE << "C&: " << value << Color::FG::DEFAULT << endl;
@@ -141,6 +188,7 @@ struct Tester {
     }
 
     Tester(Tester && other) noexcept {
+        stat.move_constructor_count++;
         this->value = other.value;
         other.value = -1;
         if (ENABLE_PRINT) {
@@ -149,6 +197,7 @@ struct Tester {
     }
 
     ~Tester() {
+        stat.destructor_count++;
         if (ENABLE_PRINT) {
             cout << Color::FG::RED << "~: " << value << Color::FG::DEFAULT << endl;
         }
@@ -156,6 +205,7 @@ struct Tester {
     }
 
     Tester & operator=(const Tester & other) {
+        stat.copy_assignment_count++;
         this->value = other.value;
         if (ENABLE_PRINT) {
             cout << Color::FG::BLUE << "=&: " << value << Color::FG::DEFAULT << endl;
@@ -164,6 +214,7 @@ struct Tester {
     }
 
     Tester & operator=(Tester && other) noexcept {
+        stat.move_assignment_count++;
         this->value = other.value;
         other.value = -1;
         if (ENABLE_PRINT) {
@@ -173,6 +224,7 @@ struct Tester {
     }
 
     bool operator<(const Tester & other) const {
+        stat.operator_less_count++;
         if (ENABLE_PRINT) {
             cout << Color::FG::MAGENTA << other.value << "<" << value << Color::FG::DEFAULT << endl;
         }
@@ -188,8 +240,14 @@ struct Tester {
         return os << tester.value;
     }
 
+    static void reset() {
+        stat = Stat();
+    }
+
     static bool ENABLE_PRINT;
 };
+
+Stat Tester::stat = Stat();
 
 bool Tester::ENABLE_PRINT = false;
 
@@ -213,10 +271,35 @@ bool iterative_data_test(A a, B b, const string & test_name, bool reverse = fals
 
 template<typename A, typename B>
 void insert_random(A & a, B & b, size_t count) {
+    Stat insert_stat;
+    Stat insert_stat_ref;
+    if (Tester::ENABLE_PRINT)
+        cout << endl << endl << "Inserting " << count << " elements" << endl;
     for (size_t i = 0; i < count; ++i) {
         size_t random = rng();
+        if (Tester::ENABLE_PRINT)
+            cout << "inserting " << random << endl;
+        Tester::reset();
+        if (Tester::ENABLE_PRINT)
+            cout << "AVLTree insert" << endl;
         a.insert(random);
+        if (Tester::ENABLE_PRINT)
+            cout << "----------------" << endl;
+        insert_stat += Tester::stat;
+        if (Tester::ENABLE_PRINT)
+            cout << "Set insert" << endl;
+        Tester::reset();
         b.emplace(random);
+        if (Tester::ENABLE_PRINT)
+            cout << "----------------" << endl << endl;
+        insert_stat_ref += Tester::stat;
+    }
+    if (Tester::ENABLE_PRINT) {
+        cout << Color::FG::BLUE << "insert_stat" << Color::FG::YELLOW << endl;
+        insert_stat.print();
+        cout << endl << Color::FG::BLUE << "insert_stat_ref" << Color::FG::YELLOW << endl;
+        insert_stat_ref.print();
+        cout << Color::FG::DEFAULT << endl;
     }
 }
 
