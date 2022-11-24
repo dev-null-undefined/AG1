@@ -733,16 +733,14 @@ namespace stl {
             return iterator(current);
         }
 
-        template<typename... M>
-        iterator find(M && ... arguments) const {
-            avl_find_result result = inner_find(value_type(std::forward<M>(arguments)...));
-            if (!result) return end();
-            return iterator(result.node);
+        const_iterator find(value_reference value) const {
+            avl_find_result result = inner_find(value);
+            if (result) return const_iterator(result.node);
+            return end();
         }
 
-        template<typename... M>
-        size_type count(M && ... arguments) const {
-            return (bool) inner_find(value_type(std::forward<M>(arguments)...));
+        size_type count(const value_type & value) const {
+            return (bool) inner_find(value);
         }
 
         //<editor-fold desc="Iterators">
