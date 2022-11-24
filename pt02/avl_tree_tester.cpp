@@ -98,30 +98,6 @@ std::string toString(A a) {
     }
 }
 
-
-template<typename A, typename B>
-bool iterative_data_test_iterators(A b1, A e1, B b2, B e2, const string & test_name) {
-    for (; b1 != e1; ++b1, ++b2) {
-        if (b2 == e2) {
-            tests[test_name] = "Failed iterator of reference ended before us";
-            return true;
-        }
-        if (*b1 != *b2) {
-            if constexpr (std::is_trivial_v<decltype(*b1)>) {
-                tests[test_name] = string_format(string("%d != %d"), *b1, *b2);
-            } else {
-                tests[test_name] = string_format("Non trivial %s != %s", toString(*b1).c_str(), toString(*b2).c_str());
-            }
-            return true;
-        }
-    }
-    if (b2 != e2) {
-        tests[test_name] = "failed not at the end of set";
-        return true;
-    }
-    return false;
-}
-
 struct Stat {
 
     size_t constructor_count;
@@ -169,63 +145,66 @@ struct Stat {
 struct Tester {
     size_t value;
     static Stat stat;
+    static Stat stat_ref;
+    static Stat * current;
+    static bool disable_stat;
 
 
     explicit Tester(size_t value) {
-        stat.constructor_count++;
+        if (!disable_stat) current->constructor_count++;
         this->value = value;
-        if (ENABLE_PRINT) {
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::GREEN << "C: " << this->value << Color::FG::DEFAULT << endl;
         }
     }
 
     Tester(const Tester & other) {
-        stat.copy_constructor_count++;
+        if (!disable_stat) current->copy_constructor_count++;
         this->value = other.value;
-        if (ENABLE_PRINT) {
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::BLUE << "C&: " << value << Color::FG::DEFAULT << endl;
         }
     }
 
     Tester(Tester && other) noexcept {
-        stat.move_constructor_count++;
+        if (!disable_stat) current->move_constructor_count++;
         this->value = other.value;
         other.value = -1;
-        if (ENABLE_PRINT) {
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::CYAN << "C&&: " << value << Color::FG::DEFAULT << endl;
         }
     }
 
     ~Tester() {
-        stat.destructor_count++;
-        if (ENABLE_PRINT) {
+        if (!disable_stat) current->destructor_count++;
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::RED << "~: " << value << Color::FG::DEFAULT << endl;
         }
         value = -1;
     }
 
     Tester & operator=(const Tester & other) {
-        stat.copy_assignment_count++;
+        if (!disable_stat) current->copy_assignment_count++;
         this->value = other.value;
-        if (ENABLE_PRINT) {
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::BLUE << "=&: " << value << Color::FG::DEFAULT << endl;
         }
         return *this;
     }
 
     Tester & operator=(Tester && other) noexcept {
-        stat.move_assignment_count++;
+        if (!disable_stat) current->move_assignment_count++;
         this->value = other.value;
         other.value = -1;
-        if (ENABLE_PRINT) {
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::CYAN << "=&&: " << value << Color::FG::DEFAULT << endl;
         }
         return *this;
     }
 
     bool operator<(const Tester & other) const {
-        stat.operator_less_count++;
-        if (ENABLE_PRINT) {
+        if (!disable_stat) current->operator_less_count++;
+        if (ENABLE_PRINT > 5) {
             cout << Color::FG::MAGENTA << other.value << "<" << value << Color::FG::DEFAULT << endl;
         }
         return value < other.value;
@@ -241,15 +220,60 @@ struct Tester {
     }
 
     static void reset() {
+        set_ref(false);
         stat = Stat();
+        stat_ref = Stat();
     }
 
-    static bool ENABLE_PRINT;
+    static void set_ref(bool value) {
+        is_ref = value;
+        current = is_ref ? &stat_ref : &stat;
+    }
+
+    static size_t ENABLE_PRINT;
+    static bool is_ref;
 };
 
 Stat Tester::stat = Stat();
+bool Tester::disable_stat = false;
+Stat Tester::stat_ref = Stat();
+Stat * Tester::current = &Tester::stat;
+bool Tester::is_ref = false;
 
-bool Tester::ENABLE_PRINT = false;
+size_t Tester::ENABLE_PRINT = 0;
+
+
+template<typename A, typename B>
+bool iterative_data_test_iterators(A b1, A e1, B b2, B e2, const string & test_name) {
+    for (; b1 != e1;) {
+        if (b2 == e2) {
+            tests[test_name] = "Failed iterator of reference ended before us";
+            return false;
+        }
+        Tester::set_ref(false);
+        typename A::reference a = *b1;
+        Tester::set_ref(true);
+        typename B::reference b = *b2;
+        if (a != b) {
+            if constexpr (std::is_trivial_v<decltype(*b1)>) {
+                tests[test_name] = string_format(string("%d != %d"), *b1, *b2);
+            } else {
+                tests[test_name] = string_format("Non trivial %s != %s", toString(*b1).c_str(), toString(*b2).c_str());
+            }
+            return false;
+        }
+
+        Tester::set_ref(false);
+        ++b1;
+        Tester::set_ref(true);
+        ++b2;
+    }
+    if (b2 != e2) {
+        tests[test_name] = "failed not at the end of set";
+        return false;
+    }
+    return true;
+}
 
 
 template<typename A, typename B>
@@ -271,288 +295,350 @@ bool iterative_data_test(A a, B b, const string & test_name, bool reverse = fals
 
 template<typename A, typename B>
 void insert_random(A & a, B & b, size_t count) {
-    Stat insert_stat;
-    Stat insert_stat_ref;
-    if (Tester::ENABLE_PRINT)
+    if (Tester::ENABLE_PRINT > 5)
         cout << endl << endl << "Inserting " << count << " elements" << endl;
     for (size_t i = 0; i < count; ++i) {
         size_t random = rng();
-        if (Tester::ENABLE_PRINT)
+        if (Tester::ENABLE_PRINT > 5)
             cout << "inserting " << random << endl;
-        Tester::reset();
-        if (Tester::ENABLE_PRINT)
+        if (Tester::ENABLE_PRINT > 5)
             cout << "AVLTree insert" << endl;
+        Tester::set_ref(false);
         a.insert(random);
-        if (Tester::ENABLE_PRINT)
+        if (Tester::ENABLE_PRINT > 5)
             cout << "----------------" << endl;
-        insert_stat += Tester::stat;
-        if (Tester::ENABLE_PRINT)
+        if (Tester::ENABLE_PRINT > 5)
             cout << "Set insert" << endl;
-        Tester::reset();
+        Tester::set_ref(true);
         b.emplace(random);
-        if (Tester::ENABLE_PRINT)
+        if (Tester::ENABLE_PRINT > 5)
             cout << "----------------" << endl << endl;
-        insert_stat_ref += Tester::stat;
     }
-    if (Tester::ENABLE_PRINT) {
+    if (Tester::ENABLE_PRINT > 5) {
         cout << Color::FG::BLUE << "insert_stat" << Color::FG::YELLOW << endl;
-        insert_stat.print();
+        Tester::stat.print();
         cout << endl << Color::FG::BLUE << "insert_stat_ref" << Color::FG::YELLOW << endl;
-        insert_stat_ref.print();
+        Tester::stat_ref.print();
         cout << Color::FG::DEFAULT << endl;
     }
 }
 
-void test_iterators() {
-    string test_name = std::source_location::current().function_name();
+template<typename Function>
+void testbed(const Function & test, const source_location & location) {
+    string test_name = location.function_name();
     cout << "Testing now: " << test_name << endl;
     tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
+    Tester::disable_stat = true;
+    for (size_t j = TEST_CONSTANT - 1; j < TEST_CONSTANT; ++j) {
+        if (j == TEST_CONSTANT - 1) {
+            Tester::disable_stat = false;
+            Tester::reset();
+        }
+        if (!test(j, test_name)) {
+            assert(tests[test_name].has_value());
+            return;
+        } else {
+            assert(!tests[test_name].has_value());
+        }
+        if (j == TEST_CONSTANT - 1) {
+            cout << Color::FG::BLUE << "insert_stat" << Color::FG::YELLOW << endl;
+            Tester::stat.print();
+            cout << endl << Color::FG::BLUE << "insert_stat_ref" << Color::FG::YELLOW << endl;
+            Tester::stat_ref.print();
+            cout << Color::FG::DEFAULT << endl;
+
+            Tester::disable_stat = true;
+        }
     }
+    Tester::ENABLE_PRINT = 0;
+}
+
+void test_iterators() {
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 
 void test_reverse_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name, true)) return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name, true)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_const_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(int_tree, int_tree_ref,
-                                                                                   test_name))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_const_reverse_iterators() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(int_tree, int_tree_ref, test_name,
-                                                                                   true))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<const AVLTree<Tester> &, const std::set<Tester> &>(a, b, test_name, true))
+            return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 
 void test_copy() {
-    Tester::ENABLE_PRINT = false;
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        AVLTree<Tester> int_tree_copy(int_tree);
-        set<Tester> int_tree_copy_ref(int_tree_ref);
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_copy(a);
+        Tester::set_ref(true);
+        set<Tester> b_copy(b);
+        insert_random(a_copy, b_copy, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_move() {
-    Tester::ENABLE_PRINT = false;
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        AVLTree<Tester> int_tree_copy(std::move(int_tree));
-        set<Tester> int_tree_copy_ref(std::move(int_tree_ref));
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+
+        Tester::set_ref(false);
+        AVLTree<Tester> a_copy(a);
+        Tester::set_ref(true);
+        set<Tester> b_copy(b);
+        insert_random(a_copy, b_copy, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_move(std::move(a_copy));
+        Tester::set_ref(true);
+        set<Tester> b_move(std::move(b_copy));
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_assign_move() {
-    Tester::ENABLE_PRINT = false;
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        AVLTree<Tester> int_tree_copy;
-        set<Tester> int_tree_copy_ref;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        int_tree_copy = std::move(int_tree);
-        int_tree_copy_ref = std::move(int_tree_ref);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_copy(a);
+        Tester::set_ref(true);
+        set<Tester> b_copy(b);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_move;
+        Tester::set_ref(true);
+        set<Tester> b_move;
+        insert_random(a_move, b_move, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
+        Tester::set_ref(false);
+        a_move = std::move(a_copy);
+        Tester::set_ref(true);
+        b_move = std::move(b_copy);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_move, b_move, test_name)) return false;
+        Tester::disable_stat = true;
+        if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b, b_move, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a, a_move, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_assign_copy() {
-    Tester::ENABLE_PRINT = false;
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        AVLTree<Tester> int_tree_copy;
-        set<Tester> int_tree_copy_ref;
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-        int_tree = int_tree_copy;
-        int_tree_ref = int_tree_copy_ref;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-        insert_random(int_tree_copy, int_tree_copy_ref, j);
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree_copy, int_tree_copy_ref,
-                                                                       test_name))
-            return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_copy(a);
+        Tester::set_ref(true);
+        set<Tester> b_copy(b);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_copy, b_copy, test_name)) return false;
+        Tester::set_ref(false);
+        AVLTree<Tester> a_help;
+        Tester::set_ref(true);
+        set<Tester> b_help;
+        insert_random(a_help, b_help, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
+        Tester::set_ref(false);
+        a_help = a;
+        Tester::set_ref(true);
+        b_help = b;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
+        Tester::disable_stat = true;
+        if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b, b_help, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a, a_help, test_name)) return false;
+        Tester::disable_stat = false;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a_help, b_help, test_name)) return false;
+        Tester::disable_stat = true;
+        if (!iterative_data_test<std::set<Tester> &, std::set<Tester> &>(b_copy, b_help, test_name)) return false;
+        if (!iterative_data_test<AVLTree<Tester> &, AVLTree<Tester> &>(a_copy, a_help, test_name)) return false;
+        return true;
+    }, std::source_location::current());
 }
 
-int inner_count_test(const std::vector<Tester> & values, const std::set<Tester> & tree_ref,
-                     const stl::AVLTree<Tester> & tree) {
+bool inner_count_test(const std::vector<Tester> & values, const std::set<Tester> & tree_ref,
+                      const stl::AVLTree<Tester> & tree) {
+    bool before = Tester::disable_stat;
     string test_name = "find";
-    if (values.empty()) return 0;
-    for (size_t i = 0; i < TEST_CONSTANT; ++i) {
+    if (values.empty()) return true;
+
+    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
+        Tester::disable_stat = before;
+        if (j == TEST_CONSTANT - 1) {
+            Tester::ENABLE_PRINT = 1;
+        }
         size_t random = rng();
         const Tester & find = values[random % values.size()];
+        Tester::set_ref(false);
         unsigned long a = tree.count(find);
+        Tester::set_ref(true);
         unsigned long b = tree_ref.count(find);
         DoNotOptimize(a);
         DoNotOptimize(b);
         if ((a) != (b)) {
             tests[test_name] = string_format("value list %d != %d", a, b);
-            return 1;
+            return false;
         }
-        a = tree.count(random);
-        b = tree_ref.count(Tester(random));
+
+        Tester::disable_stat = true;
+        Tester to_find(random);
+        Tester::disable_stat = before;
+
+        Tester::set_ref(false);
+        a = tree.count(to_find);
+        Tester::set_ref(true);
+        b = tree_ref.count(to_find);
         DoNotOptimize(a);
         DoNotOptimize(b);
         if (a != b) {
-            tests[test_name] = string_format("random %d != %d", tree.count(random), tree_ref.count(Tester(random)));
-            return 1;
+            tests[test_name] = string_format("random %d != %d", tree.count(to_find),
+                                             tree_ref.count(to_find));
+            return false;
         }
+        Tester::disable_stat = true;
     }
-    return 0;
+    return true;
 }
 
 void test_find() {
-    Tester::ENABLE_PRINT = false;
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; j++) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        vector<Tester> values;
-        insert_random(int_tree, int_tree_ref, j);
-        for (const auto & item : int_tree_ref) values.emplace_back(item);
-        DoNotOptimize(int_tree);
-        DoNotOptimize(int_tree_ref);
-        DoNotOptimize(values);
-        int error = inner_count_test(values, int_tree_ref, int_tree);
-        if (error) return;
-    }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        std::vector<Tester> values;
+        for (const Tester & t : b) {
+            bool before = Tester::disable_stat;
+            Tester::disable_stat = true;
+            values.push_back(t);
+            Tester::disable_stat = before;
+        }
+        if (!inner_count_test(values, b, a)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_delete() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        vector<Tester> values;
-        insert_random(int_tree, int_tree_ref, j);
-        for (const auto & item : int_tree_ref) values.emplace_back(item);
-        for (size_t i = 0; i < j * 2; i++) {
-            Tester element = values[rng() % values.size()];
-            if (int_tree_ref.count(element)) {
-                if (!int_tree.count(element)) {
-                    tests[test_name] = "Didn't find element in tree";
-                    return;
-                }
-                int_tree.remove(element);
-                int_tree_ref.erase(element);
-            } else if (int_tree.count(element)) {
-                tests[test_name] = "Didn't delete element in tree";
-            }
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        std::vector<Tester> values;
+        for (const Tester & t : b) {
+            bool before = Tester::disable_stat;
+            Tester::disable_stat = true;
+            values.push_back(t);
+            Tester::disable_stat = before;
         }
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-    }
+        for (size_t j = 0; j < i * 2; ++j) {
+            size_t random = rng();
+            const Tester & find = values[random % values.size()];
+            Tester::set_ref(false);
+            bool remove_a = a.remove(find);
+            Tester::set_ref(true);
+            size_t remove_b = b.erase(find);
+            if (remove_a != remove_b) {
+                tests[test_name] = string_format("remove tree(%d) != ref(%d)", remove_a, remove_b);
+                return false;
+            }
+            if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        }
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 void test_random_access() {
-    string test_name = std::source_location::current().function_name();
-    cout << "Testing now: " << test_name << endl;
-    tests[test_name] = std::optional<std::string>();
-    for (size_t j = 0; j < TEST_CONSTANT; ++j) {
-        AVLTree<Tester> int_tree;
-        set<Tester> int_tree_ref;
-        insert_random(int_tree, int_tree_ref, j);
-        for (size_t i = 0; i < j; ++i) {
-            size_t random = rng();
-            if (!int_tree_ref.empty()) {
-                auto test = int_tree[random % int_tree_ref.size()];
-                auto ref = std::next(int_tree_ref.begin(), (long) (random % int_tree_ref.size()));
+    testbed([](size_t i, const string & test_name) {
+        AVLTree<Tester> a;
+        set<Tester> b;
+        insert_random(a, b, i);
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
 
+        for (size_t j = 0; j < i; ++j) {
+            size_t random = rng();
+
+            unsigned long size = b.size();
+            if (!b.empty()) {
+                Tester::set_ref(false);
+                auto test = a[random % size];
+                Tester::set_ref(true);
+                auto ref = std::next(b.begin(), (long) (random % size));
+
+                bool before = Tester::disable_stat;
+                Tester::disable_stat = true;
                 if (*test != *ref) {
                     tests[test_name] = string_format("Non trivial %s != %s", toString(*test).c_str(),
                                                      toString(*ref).c_str());
+                    return false;
                 }
-                return;
+                Tester::disable_stat = before;
             }
         }
-        if (iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(int_tree, int_tree_ref, test_name)) return;
-    }
+        if (!iterative_data_test<AVLTree<Tester> &, std::set<Tester> &>(a, b, test_name)) return false;
+        Tester::disable_stat = true;
+        return true;
+    }, std::source_location::current());
 }
 
 
