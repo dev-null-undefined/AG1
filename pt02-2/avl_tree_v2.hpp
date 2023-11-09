@@ -476,7 +476,7 @@ public:
         if (index >= self().*size_counter)
             throw std::out_of_range("Index out of range " + std::to_string(index) + " maximum is " +
                                     std::to_string(self().*size_counter));
-        return _find<size_counter>(index);
+        return _find<size_counter>(index + 1);
     }
 };
 
@@ -546,8 +546,8 @@ auto main() -> signed {
     node.setValue(4);
     node.generateGraph();
 //    node.find<&FilteredSizeCounter<char, '\n'>::Inner<NodeType>::size>(0);
-//    auto t = node.find<&SizeCounter<NodeType>::size>(0);
-
+    auto t = node.find<&SizeCounter<NodeType>::size>(0);
+    std::cout << t.getValue() << std::endl;
 
     std::shared_ptr<NodeType> node2 = std::make_shared<NodeType>();
     node.setChild<Direction::right>(node2);
@@ -569,6 +569,9 @@ auto main() -> signed {
         system(("dot -T png < file" + std::to_string(i) + ".dot > image" + std::to_string(i) + ".png").c_str());
     }
 
+    for (int i = 0; i < 7; ++i) {
+        std::cout << int(node.find<&SizeCounter<NodeType>::size>(i).getValue()) << std::endl;
+    }
     updateAll(node);
     return 0;
 }
