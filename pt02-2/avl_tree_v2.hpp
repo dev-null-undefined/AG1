@@ -257,6 +257,16 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         return child;
     }
 
+    size_t childCount() {
+        return (left != nullptr) + (right != nullptr);
+    }
+
+    std::shared_ptr<T_Node> getAnyChild() {
+        if (left)
+            return left;
+        return right;
+    }
+
     std::shared_ptr<T_Node> left = nullptr, right = nullptr;
 };
 
@@ -485,9 +495,35 @@ public:
         auto aux = std::make_shared<T_Node>();
         copyAll(*aux, self());
         toInsert->setChild(direction, aux);
-        toInsert->bubbleUp();
         copyAll(self(), *node);
         return self();
+    }
+};
+
+template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
+Direction getChildDirection(T_Node *parent, T_Node *child) {
+    if (to_ptr(parent->left) == child)
+        return Direction::left;
+    return Direction::right;
+}
+
+template<typename T_Node>
+struct Delete : mixins::SureIAmThat<T_Node, Delete> {
+    using mixins::SureIAmThat<T_Node, Delete>::self;
+
+public:
+    void remove() {
+        if (self().childCount() == 0) {
+            self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+        } else if (self().childCount() == 1) {
+            self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+        } else if (self().childCount() == 2) {
+            T_Node *toReplace = to_ptr(self().right);
+            while (toReplace->left)
+                toReplace = to_ptr(toReplace->left);
+            copyAll(self(), *toReplace);
+            toReplace->remove();
+        }
     }
 };
 
@@ -503,7 +539,8 @@ auto main() -> signed {
             FilteredSizeCounter<char, '\n'>::Inner,
             SizeCounter,
             Indexable,
-            Insert>;
+            Insert,
+            Delete>;
 
     NodeType node;
     node.setValue(4);
@@ -516,8 +553,16 @@ auto main() -> signed {
     node.setChild<Direction::right>(node2);
     node.right->setValue(99);
 
-    for (int i = 1; i < 5; ++i) {
+    for (int i = 1; i < 8; ++i) {
         node.right->insert(std::make_shared<NodeType>()).setValue(i);
+        if (i == 3 || i == 7) {
+            std::ofstream fs("file" + std::to_string(i) + "-d.dot");
+            node.generateGraph(fs);
+            fs.close();
+            system(("dot -T png < file" + std::to_string(i) + "-d.dot > image" + std::to_string(i) + "-d.png").c_str());
+
+            node.right->remove();
+        }
         std::ofstream fs("file" + std::to_string(i) + ".dot");
         node.generateGraph(fs);
         fs.close();
