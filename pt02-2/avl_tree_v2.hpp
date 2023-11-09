@@ -1,5 +1,5 @@
 #include <iostream>
-#include <sstream>
+#include <memory>
 
 namespace detail {
     template<typename... Args>
@@ -28,6 +28,42 @@ namespace detail {
 
     template<typename ...T>
     constexpr bool next_type_v = next_type<T...>::value;
+
+    template<typename T>
+    struct is_shared_ptr : std::false_type {
+    };
+
+    template<typename T>
+    struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {
+    };
+
+    template<typename T>
+    constexpr bool is_shared_ptr_v = is_shared_ptr<T>::value;
+
+    template<typename T>
+    concept SharedPtr = is_shared_ptr_v<T>;
+
+    template<typename T>
+    concept NumericType = std::integral<T> || std::floating_point<T>;
+
+
+    template<typename T>
+    concept Printable = requires(T t) {
+        { std::cout << t } -> std::same_as<std::ostream &>;
+    };
+}
+
+template<typename T>
+std::string better_to_string(const T &t);
+
+template<>
+std::string better_to_string<std::string>(const std::string &t) {
+    return t;
+}
+
+template<detail::NumericType T>
+std::string better_to_string(const T &t) {
+    return std::to_string(t);
 }
 
 namespace mixins {
@@ -76,110 +112,7 @@ namespace mixins {
     concept Mixin = (std::is_base_of_v<M<std::decay_t<T>>, std::decay_t<T>> && ...);
 }
 
-template<typename T_Node>
-struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
-    using mixins::SureIAmThat<T_Node, BinaryNode>::self;
-
-    void print_value() {
-        std::cout << self().value << std::endl;
-    }
-
-    void update() {
-        std::cout << "Called update in BinaryNode" << std::endl;
-    };
-
-    std::string to_string() {
-        return "Node has " + std::to_string((left != nullptr) + (right != nullptr)) + " childs";
-    }
-
-    T_Node *left = nullptr, *right = nullptr;
-};
-
-template<typename T_Node>
-struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
-    using mixins::SureIAmThat<T_Node, ParentNode>::self;
-
-    T_Node *parent = nullptr;
-};
-
-template<typename T_Node>
-struct GraphViz : mixins::SureIAmThat<T_Node, GraphViz> {
-    using mixins::SureIAmThat<T_Node, GraphViz>::self;
-private:
-
-    void bst_print_dot_null(T_Node &node, int nullcount, std::ostream &output) const {
-        output << "    null" << nullcount << " [shape=point];\n";
-        output << "    " << node.value << " -> null" << nullcount << ";\n";
-    }
-
-    void bst_print_dot_aux(T_Node &node, std::ostream &output) const {
-        static int nullcount = 0;
-        if (node.parent) {
-            output << "    " << node.value << " -> " << node.parent->value << "[style=dotted];\n";
-        }
-
-        if (node.left) {
-            output << "    " << node.value << " -> " << node.left->value << ";\n";
-            bst_print_dot_aux(*node.left, output);
-        } else
-            bst_print_dot_null(node, nullcount++, output);
-
-        if (node.right) {
-            output << "    " << node.value << " -> " << node.right->value << ";\n";
-            bst_print_dot_aux(*node.right, output);
-        } else
-            bst_print_dot_null(node, nullcount++, output);
-    }
-
-public:
-    void generateGraph(std::ostream &output = std::cout) {
-        output << "digraph BST {\n";
-        output << "    node [fontname=\"Arial\"];\n";
-
-        if (!self().right && !self().left)
-            output << "    " << self().value << ";\n";
-        else
-            bst_print_dot_aux(self(), output);
-
-        output << "}\n" << std::flush;
-    }
-};
-
-template<typename T>
-struct ValueNode {
-    template<typename T_Node>
-    struct Inner : mixins::SureIAmThat<T_Node, Inner> {
-        using mixins::SureIAmThat<T_Node, Inner>::self;
-
-        void update() {
-            std::cout << "Called update in ValueNode" << std::endl;
-        };
-
-        void print_left() {
-            if (self().left)
-                self().left->print_value();
-            else
-                std::cout << "No left node" << std::endl;
-        }
-
-        void print_right() {
-            if (self().right)
-                self().right->print_value();
-            else
-                std::cout << "No right node" << std::endl;
-        }
-
-        void print_parent() const {
-            std::cout << self().parent << std::endl;
-        }
-
-        std::string to_string() {
-            return std::to_string(value);
-        }
-
-        T value;
-    };
-};
+// region execAll macro
 
 #define ExecAll(FunName, Function) \
 namespace mixins {\
@@ -229,46 +162,364 @@ namespace mixins {\
             };\
         }) { static_cast<Current &&>(self).Function(std::forward<Args>(args)...); }\
     }\
-}\
+}
 
-ExecAll(printAll, print_value)
+// endregion
+
 ExecAll(updateAll, update)
-ExecAll(to_stringAll, to_string)
+ExecAll(mixinInfoAll, mixinInfo)
+ExecAll(copyAll, copy)
 
+
+template<typename T>
+requires (detail::SharedPtr<std::remove_reference_t<T>>)
+decltype(auto) to_ptr(T something) {
+    return something.get();
+}
+
+template<typename T>
+decltype(auto) to_ptr(T *something) {
+    return something;
+}
 
 template<typename T_Node>
-struct ToString : mixins::SureIAmThat<T_Node, ToString> {
-    using mixins::SureIAmThat<T_Node, ToString>::self;
-public:
-    void print(std::ostream &output = std::cout) {
-        std::string buffer;
-        to_stringAllRet(self(), [&buffer](const std::string &out) noexcept {
-            buffer += (buffer.size() > 0 ? ", " : "") + out;
-        });
-        output << buffer << std::endl;
+struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
+    using mixins::SureIAmThat<T_Node, ParentNode>::self;
+
+    T_Node *parent = nullptr;
+};
+
+enum class Direction {
+    left, right
+};
+
+template<typename T_Node>
+struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp>, ParentNode<T_Node> {
+    using mixins::SureIAmThat<T_Node, BubbleUp>::self;
+
+    void bubbleUp() {
+        T_Node *current = to_ptr(&self());
+        updateAll(*current);
+        while (current->parent) {
+            updateAll(*to_ptr(current->parent));
+            current = to_ptr(current->parent);
+        }
     }
 };
 
+template<typename T_Node>
+struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
+    using mixins::SureIAmThat<T_Node, BinaryNode>::self;
+
+    template<Direction direction>
+    decltype(auto) getChild() {
+        static_assert(direction == Direction::left || direction == Direction::right, "Invalid direction");
+        if constexpr (direction == Direction::left) {
+            return left;
+        } else {
+            return right;
+        }
+    }
+
+    decltype(auto) getChild(Direction direction) {
+        if (direction == Direction::left) {
+            return left;
+        } else {
+            return right;
+        }
+    }
+
+    template<Direction direction>
+    requires mixins::Mixin<T_Node, BubbleUp>
+    std::shared_ptr<T_Node> setChild(std::shared_ptr<T_Node> child) {
+        if constexpr (direction == Direction::left) {
+            left = child;
+        } else {
+            right = child;
+        }
+        child->parent = &self();
+        child->bubbleUp();
+        return child;
+    }
+
+    std::shared_ptr<T_Node> setChild(Direction direction, std::shared_ptr<T_Node> child) {
+        if (direction == Direction::left) {
+            left = child;
+        } else {
+            right = child;
+        }
+        child->parent = &self();
+        child->bubbleUp();
+        return child;
+    }
+
+    std::shared_ptr<T_Node> left = nullptr, right = nullptr;
+};
+
+template<typename T_Node>
+struct Debug : mixins::SureIAmThat<T_Node, Debug> {
+    using mixins::SureIAmThat<T_Node, Debug>::self;
+
+public:
+    std::string getDebug() {
+        std::string buffer = "\"";
+        mixinInfoAllRet(self(), [&buffer](const auto &out) noexcept {
+            buffer += (buffer.size() > 1 ? ", " : "") + better_to_string(out);
+        });
+        return buffer + "\"";
+    }
+};
+
+template<typename T_Node>
+struct GraphViz : mixins::SureIAmThat<T_Node, GraphViz>, Debug<T_Node> {
+    using mixins::SureIAmThat<T_Node, GraphViz>::self;
+private:
+
+    void bst_print_dot_null(T_Node &node, int nullcount, std::ostream &output, Direction dir) const {
+        output << "    null" << nullcount << " [shape=point];\n";
+        output << "    " << node.getDebug() << " -> null" << nullcount
+               << (dir == Direction::left ? "[color=blue]" : "[color=red]") << ";\n";
+    }
+
+    void bst_print_dot_aux(T_Node &node, std::ostream &output) const {
+        static int nullcount = 0;
+        if (node.parent) {
+            output << "    " << node.getDebug() << " -> " << node.parent->getDebug() << "[style=dotted];\n";
+        }
+
+        if (node.left) {
+            output << "    " << node.getDebug() << " -> " << node.left->getDebug() << "[color=blue];\n";
+            bst_print_dot_aux(*node.left, output);
+        } else
+            bst_print_dot_null(node, nullcount++, output, Direction::left);
+
+        if (node.right) {
+            output << "    " << node.getDebug() << " -> " << node.right->getDebug() << "[color=red];\n";
+            bst_print_dot_aux(*node.right, output);
+        } else
+            bst_print_dot_null(node, nullcount++, output, Direction::right);
+    }
+
+public:
+    void generateGraph(std::ostream &output = std::cout) {
+        output << "digraph BST {\n";
+        output << "    node [fontname=\"Arial\"];\n";
+
+        if (!self().right && !self().left)
+            output << "    " << self().getDebug() << ";\n";
+        else
+            bst_print_dot_aux(self(), output);
+
+        output << "}\n" << std::flush;
+    }
+};
+
+template<typename T>
+struct ValueNode {
+    template<typename T_Node>
+    struct Inner : mixins::SureIAmThat<T_Node, Inner> {
+        using mixins::SureIAmThat<T_Node, Inner>::self;
+
+    private:
+        T _value;
+
+    public:
+        T mixinInfo() {
+            return _value;
+        }
+
+        const T &getValue() const {
+            return _value;
+        }
+
+        T_Node &setValue(T value) {
+            _value = std::move(value);
+            if constexpr (requires { requires mixins::Mixin<T_Node, BubbleUp>; }) {
+                self().bubbleUp();
+            }
+            return self();
+        }
+
+        void copy(const T_Node &other) {
+            setValue(other.getValue());
+        }
+    };
+};
+
+template<typename T_Node>
+struct SizeCounter : mixins::SureIAmThat<T_Node, SizeCounter> {
+    using mixins::SureIAmThat<T_Node, SizeCounter>::self;
+
+    void update() {
+        size = getSize<&T_Node::left>() + getSize<&T_Node::right>() + 1;
+    }
+
+    template<auto direction>
+    size_t getSize() {
+        if (self().*direction)
+            return (self().*direction)->SizeCounter<T_Node>::size;
+        return 0;
+    }
+
+    std::string mixinInfo() {
+        return "s: " + std::to_string(size);
+    }
+
+    size_t size = 0;
+};
+
+template<typename T, T filter>
+struct FilteredSizeCounter {
+    template<typename T_Node>
+    struct Inner : mixins::SureIAmThat<T_Node, Inner> {
+        using mixins::SureIAmThat<T_Node, Inner>::self;
+
+        void update() {
+            size = getSize<&T_Node::left>() + getSize<&T_Node::right>() + (self().getValue() == filter);
+        }
+
+        template<auto direction>
+        size_t getSize() {
+            if (self().*direction)
+                return (self().*direction)->Inner<T_Node>::size;
+            return 0;
+        }
+
+        std::string mixinInfo() {
+            return "f[" + std::to_string(filter) + "]: " + std::to_string(size);
+        }
+
+        size_t size = 0;
+    };
+};
+
+template<typename T_Node>
+struct MaxDepth : mixins::SureIAmThat<T_Node, MaxDepth> {
+    using mixins::SureIAmThat<T_Node, MaxDepth>::self;
+
+    void update() {
+        maxDepth = std::max(getDepth<&T_Node::left>(), getDepth<&T_Node::right>()) + 1;
+    }
+
+    template<auto direction>
+    size_t getDepth() {
+        if (self().*direction)
+            return (self().*direction)->maxDepth;
+        return 0;
+    }
+
+    auto mixinInfo() {
+        return "d:" + std::to_string(maxDepth);
+    }
+
+    size_t maxDepth = 0;
+};
+
+template<typename T_Node>
+struct Indexable : mixins::SureIAmThat<T_Node, Indexable> {
+    using mixins::SureIAmThat<T_Node, Indexable>::self;
+
+private:
+    template<auto size_counter>
+    const T_Node &_find(size_t index) const {
+        const T_Node *current = &self();
+        while (true) {
+            if (index == _currentIndex<size_counter>(current) && _isCurrent<size_counter>(current))
+                return *current;
+
+            if (index < _currentIndex<size_counter>(current)) {
+                current = to_ptr(current->left);
+            } else if (index >= _currentIndex<size_counter>(current)) {
+                index -= _currentIndex<size_counter>(current);
+                current = to_ptr(current->right);
+            }
+        }
+    }
+
+    template<auto size_counter>
+    size_t _currentIndex(const T_Node *current) const {
+        size_t index = current->*size_counter;
+        if (current->right)
+            index -= to_ptr(current->right)->*size_counter;
+        return index;
+    }
+
+
+    template<auto size_counter>
+    bool _isCurrent(const T_Node *current) const {
+        size_t subCount = 0;
+        if (current->right)
+            subCount += to_ptr(current->right)->*size_counter;
+        if (current->left)
+            subCount += to_ptr(current->left)->*size_counter;
+        return subCount != current->*size_counter;
+    }
+
+public:
+
+    template<auto size_counter>
+    const T_Node &find(size_t index) const {
+        if (index >= self().*size_counter)
+            throw std::out_of_range("Index out of range " + std::to_string(index) + " maximum is " +
+                                    std::to_string(self().*size_counter));
+        return _find<size_counter>(index);
+    }
+};
+
+template<typename T_Node>
+struct Insert : mixins::SureIAmThat<T_Node, Insert> {
+    using mixins::SureIAmThat<T_Node, Insert>::self;
+
+public:
+    T_Node &insert(std::shared_ptr<T_Node> node) {
+        Direction direction = Direction::right;
+        T_Node *toInsert = to_ptr(&self());
+        while (toInsert->getChild(direction)) {
+            toInsert = to_ptr(toInsert->getChild(direction));
+            direction = Direction::left;
+        }
+        auto aux = std::make_shared<T_Node>();
+        copyAll(*aux, self());
+        toInsert->setChild(direction, aux);
+        toInsert->bubbleUp();
+        copyAll(self(), *node);
+        return self();
+    }
+};
+
+#include <fstream>
+
 auto main() -> signed {
-    using NodeType = mixins::Mixins<ValueNode<int>::Inner, ParentNode, BinaryNode, GraphViz, ToString>;
+    using NodeType = mixins::Mixins<
+            ValueNode<char>::Inner,
+            BubbleUp,
+            BinaryNode,
+            GraphViz,
+            MaxDepth,
+            FilteredSizeCounter<char, '\n'>::Inner,
+            SizeCounter,
+            Indexable,
+            Insert>;
+
     NodeType node;
-    node.value = 4;
-    node.print_left();
-    node.print_right();
-    node.print_value();
-    node.print_parent();
+    node.setValue(4);
     node.generateGraph();
+//    node.find<&FilteredSizeCounter<char, '\n'>::Inner<NodeType>::size>(0);
+//    auto t = node.find<&SizeCounter<NodeType>::size>(0);
 
-    node.right = new NodeType;
-    node.right->parent = &node;
-    node.right->value = 5;
 
-    node.generateGraph();
+    std::shared_ptr<NodeType> node2 = std::make_shared<NodeType>();
+    node.setChild<Direction::right>(node2);
+    node.right->setValue(99);
+
+    for (int i = 1; i < 5; ++i) {
+        node.right->insert(std::make_shared<NodeType>()).setValue(i);
+        std::ofstream fs("file" + std::to_string(i) + ".dot");
+        node.generateGraph(fs);
+        fs.close();
+        system(("dot -T png < file" + std::to_string(i) + ".dot > image" + std::to_string(i) + ".png").c_str());
+    }
 
     updateAll(node);
-    printAll(node);
-
-    node.print();
-
     return 0;
 }
