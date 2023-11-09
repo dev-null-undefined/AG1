@@ -170,7 +170,6 @@ ExecAll(updateAll, update)
 ExecAll(mixinInfoAll, mixinInfo)
 ExecAll(copyAll, copy)
 
-
 template<typename T>
 requires (detail::SharedPtr<std::remove_reference_t<T>>)
 decltype(auto) to_ptr(T something) {
@@ -484,7 +483,6 @@ template<typename T_Node>
 struct Insert : mixins::SureIAmThat<T_Node, Insert> {
     using mixins::SureIAmThat<T_Node, Insert>::self;
 
-public:
     T_Node &insert(std::shared_ptr<T_Node> node) {
         Direction direction = Direction::right;
         T_Node *toInsert = to_ptr(&self());
@@ -511,7 +509,6 @@ template<typename T_Node>
 struct Delete : mixins::SureIAmThat<T_Node, Delete> {
     using mixins::SureIAmThat<T_Node, Delete>::self;
 
-public:
     void remove() {
         if (self().childCount() == 0) {
             self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
