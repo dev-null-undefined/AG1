@@ -248,8 +248,12 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         } else {
             right = child;
         }
-        child->parent = &self();
-        child->bubbleUp();
+        if (child != nullptr) {
+            child->parent = &self();
+            child->bubbleUp();
+        } else {
+            self().bubbleUp();
+        }
         return child;
     }
 
