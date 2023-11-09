@@ -184,8 +184,8 @@ struct ValueNode {
 #define ExecAll(FunName, Function) \
 namespace mixins {\
     template<typename T, typename Lambda, typename...Args>\
-    void FunName(T &&self, Lambda &&lambda, Args &&...args) {\
-        _##FunName<T, Lambda, typename std::remove_reference_t<T>::template N_type<0>, Args...>(std::forward<T>(self),\
+    void FunName##Ret(T &&self, Lambda &&lambda, Args &&...args) {\
+        _##FunName##Ret<T, Lambda, typename std::remove_reference_t<T>::template N_type<0>, Args...>(std::forward<T>(self),\
                                                                                                 std::forward<Lambda>(\
                                                                                                         lambda),\
                                                                                                 std::forward<Args>(\
@@ -199,9 +199,9 @@ namespace mixins {\
     }\
     \
     template<typename T, typename Lambda, typename Current, typename...Args>\
-    void _##FunName(T &&self, Lambda &&lambda, Args &&...args) {\
+    void _##FunName##Ret(T &&self, Lambda &&lambda, Args &&...args) {\
         if constexpr (std::remove_reference_t<T>::template hasNext<Current>()) {\
-            _##FunName<T, Lambda, typename std::remove_reference_t<T>::template Next_type<Current>>(\
+            _##FunName##Ret<T, Lambda, typename std::remove_reference_t<T>::template Next_type<Current>>(\
                     std::forward<T>(self), std::forward<Lambda>(lambda), std::forward<Args>(args)...);\
         }\
         if constexpr (requires(T &&t) {\
@@ -242,7 +242,7 @@ struct ToString : mixins::SureIAmThat<T_Node, ToString> {
 public:
     void print(std::ostream &output = std::cout) {
         std::string buffer;
-        to_stringAll(self(), [&buffer](const std::string &out) noexcept {
+        to_stringAllRet(self(), [&buffer](const std::string &out) noexcept {
             buffer += (buffer.size() > 0 ? ", " : "") + out;
         });
         output << buffer << std::endl;
