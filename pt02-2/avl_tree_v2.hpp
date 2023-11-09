@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 
 namespace detail {
     template<typename... Args>
@@ -87,6 +88,10 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         std::cout << "Called update in BinaryNode" << std::endl;
     };
 
+    std::string to_string() {
+        return "Node has " + std::to_string((left != nullptr) + (right != nullptr)) + " childs";
+    }
+
     T_Node *left = nullptr, *right = nullptr;
 };
 
@@ -168,33 +173,84 @@ struct ValueNode {
             std::cout << self().parent << std::endl;
         }
 
+        std::string to_string() {
+            return std::to_string(value);
+        }
+
         T value;
     };
 };
 
-#define ExecAll(FunName, Function)                                                             \
-namespace mixins {                                                                             \
-    template<typename T, typename ...Args>    \
-    void FunName(T && self, Args && ... args) {                                                \
-        _##FunName<T,typename std::remove_reference_t<T>::template N_type<0>,Args...>(std::forward<T>(self),std::forward<Args>(args)...);\
-    }                                                                                          \
-                                                                                               \
-    template<typename T, typename Current, typename ... Args>    \
-    void _##FunName(T && self, Args && ... args) {                                                                  \
-        if constexpr (std::remove_reference_t<T>::template hasNext<Current>()) {               \
-            _##FunName<T, typename std::remove_reference_t<T>::template Next_type<Current>>(self);\
-        }                                                                                      \
-        if constexpr (requires(T && t) {{ static_cast<Current &&>(t).Function(std::forward<Args>(args)...) }; }) {        \
-            static_cast<Current &&>(self).Function(std::forward<Args>(args)...);                                          \
-        }                                                                                      \
-    }                                                                                          \
-}                                                                                              \
+#define ExecAll(FunName, Function) \
+namespace mixins {\
+    template<typename T, typename Lambda, typename...Args>\
+    void FunName(T &&self, Lambda &&lambda, Args &&...args) {\
+        _##FunName<T, Lambda, typename std::remove_reference_t<T>::template N_type<0>, Args...>(std::forward<T>(self),\
+                                                                                                std::forward<Lambda>(\
+                                                                                                        lambda),\
+                                                                                                std::forward<Args>(\
+                                                                                                        args)...);\
+    }\
+    \
+    template<typename T, typename...Args>\
+    void FunName(T &&self, Args &&...args) {\
+        _##FunName<T, typename std::remove_reference_t<T>::template N_type<0>, Args...>(std::forward<T>(self),\
+                                                                                        std::forward<Args>(args)...);\
+    }\
+    \
+    template<typename T, typename Lambda, typename Current, typename...Args>\
+    void _##FunName(T &&self, Lambda &&lambda, Args &&...args) {\
+        if constexpr (std::remove_reference_t<T>::template hasNext<Current>()) {\
+            _##FunName<T, Lambda, typename std::remove_reference_t<T>::template Next_type<Current>>(\
+                    std::forward<T>(self), std::forward<Lambda>(lambda), std::forward<Args>(args)...);\
+        }\
+        if constexpr (requires(T &&t) {\
+            {\
+            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            }->std::same_as<void>;\
+        }) { static_cast<Current &&>(self).Function(std::forward<Args>(args)...); }\
+        else if constexpr (requires(T &&t) {\
+            {\
+            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            };\
+        }) { lambda(static_cast<Current &&>(self).Function(std::forward<Args>(args)...)); }\
+    }\
+    \
+    template<typename T, typename Current, typename...Args>\
+    void _##FunName(T &&self, Args &&...args) {\
+        if constexpr (std::remove_reference_t<T>::template hasNext<Current>()) {\
+            _##FunName<T, typename std::remove_reference_t<T>::template Next_type<Current>>(std::forward<T>(self),\
+                                                                                            std::forward<Args>(\
+                                                                                                    args)...);\
+        }\
+        if constexpr (requires(T &&t) {\
+            {\
+            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            };\
+        }) { static_cast<Current &&>(self).Function(std::forward<Args>(args)...); }\
+    }\
+}\
 
 ExecAll(printAll, print_value)
 ExecAll(updateAll, update)
+ExecAll(to_stringAll, to_string)
+
+
+template<typename T_Node>
+struct ToString : mixins::SureIAmThat<T_Node, ToString> {
+    using mixins::SureIAmThat<T_Node, ToString>::self;
+public:
+    void print(std::ostream &output = std::cout) {
+        std::string buffer;
+        to_stringAll(self(), [&buffer](const std::string &out) noexcept {
+            buffer += (buffer.size() > 0 ? ", " : "") + out;
+        });
+        output << buffer << std::endl;
+    }
+};
 
 auto main() -> signed {
-    using NodeType = mixins::Mixins<ValueNode<int>::Inner, ParentNode, BinaryNode, GraphViz>;
+    using NodeType = mixins::Mixins<ValueNode<int>::Inner, ParentNode, BinaryNode, GraphViz, ToString>;
     NodeType node;
     node.value = 4;
     node.print_left();
@@ -211,6 +267,8 @@ auto main() -> signed {
 
     updateAll(node);
     printAll(node);
+
+    node.print();
 
     return 0;
 }
