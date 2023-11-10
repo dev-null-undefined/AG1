@@ -66,6 +66,11 @@ std::string better_to_string(const T &t) {
     return std::to_string(t);
 }
 
+template<detail::NumericType T>
+int get_sign(T t) {
+    return (t > 0) - (t < 0);
+}
+
 namespace mixins {
     template<template<typename> typename ...T_mixins>
     struct Mixins : T_mixins<Mixins<T_mixins...>> ... {
@@ -181,6 +186,10 @@ decltype(auto) to_ptr(T *something) {
     return something;
 }
 
+enum class Direction {
+    left, right
+};
+
 template<typename T_Node>
 struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
     using mixins::SureIAmThat<T_Node, ParentNode>::self;
@@ -188,19 +197,41 @@ struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
     T_Node *parent = nullptr;
 };
 
-enum class Direction {
-    left, right
+
+template<typename T_Node>
+struct Balancer : mixins::SureIAmThat<T_Node, Balancer> {
+    using mixins::SureIAmThat<T_Node, Balancer>::self;
+
+    void balance() {
+        updateAll(self());
+        int delta = self().getDelta();
+        if (std::abs(delta) > 1) {
+            if (delta > 0) {
+                if (self().left->getSign() < 0) {
+                    self().left->rotateLeft();
+                }
+                self().rotateRight();
+            } else {
+                if (self().right->getSign() > 0) {
+                    self().right->rotateRight();
+                }
+                self().rotateLeft();
+            }
+        }
+    }
 };
 
 template<typename T_Node>
-struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp>, ParentNode<T_Node> {
+struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp> {
     using mixins::SureIAmThat<T_Node, BubbleUp>::self;
 
     void bubbleUp() {
+        static_assert(mixins::Mixin<T_Node, ParentNode>, "ParentNode mixin is required");
         T_Node *current = to_ptr(&self());
-        updateAll(*current);
-        while (current->parent) {
-            updateAll(*to_ptr(current->parent));
+        while (current) {
+            updateAll(*to_ptr(current));
+            if constexpr (requires { requires mixins::Mixin<T_Node, Balancer>; })
+                current->balance();
             current = to_ptr(current->parent);
         }
     }
@@ -225,6 +256,14 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
             return left;
         } else {
             return right;
+        }
+    }
+
+    static decltype(auto) directionToMember(Direction direction) {
+        if (direction == Direction::left) {
+            return &T_Node::left;
+        } else {
+            return &T_Node::right;
         }
     }
 
@@ -269,6 +308,13 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
     std::shared_ptr<T_Node> left = nullptr, right = nullptr;
 };
 
+template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
+Direction getChildDirection(const T_Node *parent, const T_Node *child) {
+    if (to_ptr(parent->left) == child)
+        return Direction::left;
+    return Direction::right;
+}
+
 template<typename T_Node>
 struct Debug : mixins::SureIAmThat<T_Node, Debug> {
     using mixins::SureIAmThat<T_Node, Debug>::self;
@@ -282,6 +328,14 @@ public:
         return buffer + "\"";
     }
 };
+
+#ifndef __PROGTEST__
+
+#include <fstream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+#endif
 
 template<typename T_Node>
 struct GraphViz : mixins::SureIAmThat<T_Node, GraphViz>, Debug<T_Node> {
@@ -325,6 +379,22 @@ public:
 
         output << "}\n" << std::flush;
     }
+
+#ifndef __PROGTEST__
+
+    void generateGraph(const std::string &filename) {
+
+        auto tmpDir = fs::temp_directory_path();
+        auto tmpFile = tmpDir / (filename + ".dot");
+        std::ofstream output(tmpFile);
+        generateGraph(output);
+        output.close();
+        system(("dot -T png < " + tmpFile.string() + " > " + filename + ".png").c_str());
+        fs::remove(tmpFile);
+    }
+
+#endif
+
 };
 
 template<typename T>
@@ -337,8 +407,8 @@ struct ValueNode {
         T _value;
 
     public:
-        T mixinInfo() {
-            return _value;
+        auto mixinInfo() {
+            return _value == '\n' ? "\\n" : std::string(1, _value);
         }
 
         const T &getValue() const {
@@ -425,6 +495,14 @@ struct MaxDepth : mixins::SureIAmThat<T_Node, MaxDepth> {
         return "d:" + std::to_string(maxDepth);
     }
 
+    int getDelta() {
+        return getDepth<&T_Node::left>() - getDepth<&T_Node::right>();
+    }
+
+    int getSign() {
+        return get_sign(getDelta());
+    }
+
     size_t maxDepth = 0;
 };
 
@@ -450,13 +528,28 @@ private:
     }
 
     template<auto size_counter>
+    T_Node &_find(size_t index) {
+        T_Node *current = &self();
+        while (true) {
+            if (index == _currentIndex<size_counter>(current) && _isCurrent<size_counter>(current))
+                return *current;
+
+            if (index < _currentIndex<size_counter>(current)) {
+                current = to_ptr(current->left);
+            } else if (index >= _currentIndex<size_counter>(current)) {
+                index -= _currentIndex<size_counter>(current);
+                current = to_ptr(current->right);
+            }
+        }
+    }
+
+    template<auto size_counter>
     size_t _currentIndex(const T_Node *current) const {
         size_t index = current->*size_counter;
         if (current->right)
             index -= to_ptr(current->right)->*size_counter;
         return index;
     }
-
 
     template<auto size_counter>
     bool _isCurrent(const T_Node *current) const {
@@ -477,7 +570,46 @@ public:
                                     std::to_string(self().*size_counter));
         return _find<size_counter>(index + 1);
     }
+
+    template<auto size_counter>
+    T_Node &find(size_t index) {
+        if (index >= self().*size_counter)
+            throw std::out_of_range("Index out of range " + std::to_string(index) + " maximum is " +
+                                    std::to_string(self().*size_counter));
+        return _find<size_counter>(index + 1);
+    }
 };
+
+
+template<typename T_Node>
+struct GetIndex : mixins::SureIAmThat<T_Node, GetIndex> {
+    using mixins::SureIAmThat<T_Node, GetIndex>::self;
+
+private:
+    // TODO: remove repeating code
+    template<auto size_counter>
+    size_t _currentIndex(const T_Node *current) const {
+        size_t index = current->*size_counter;
+        if (current->right)
+            index -= to_ptr(current->right)->*size_counter;
+        return index;
+    }
+
+public:
+    template<auto size_counter>
+    size_t getIndex() const {
+        const T_Node *current = &self();
+        size_t index = _currentIndex<size_counter>(current);
+        while (current->parent) {
+            if (getChildDirection(current->parent, current) == Direction::right) {
+                index += _currentIndex<size_counter>(current->parent);
+            }
+            current = current->parent;
+        }
+        return index;
+    }
+};
+
 
 template<typename T_Node>
 struct Insert : mixins::SureIAmThat<T_Node, Insert> {
@@ -498,77 +630,174 @@ struct Insert : mixins::SureIAmThat<T_Node, Insert> {
     }
 };
 
-template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
-Direction getChildDirection(T_Node *parent, T_Node *child) {
-    if (to_ptr(parent->left) == child)
-        return Direction::left;
-    return Direction::right;
-}
+
+template<typename T_Node>
+struct PushBack : mixins::SureIAmThat<T_Node, PushBack> {
+    using mixins::SureIAmThat<T_Node, PushBack>::self;
+
+    T_Node &pushBack(std::shared_ptr<T_Node> node) {
+        T_Node *toInsert = to_ptr(&self());
+        while (toInsert->template getChild<Direction::right>()) {
+            toInsert = to_ptr(toInsert->template getChild<Direction::right>());
+        }
+        auto aux = std::make_shared<T_Node>();
+        copyAll(*aux, *node);
+        toInsert->template setChild<Direction::right>(aux);
+        return *aux;
+    }
+};
 
 template<typename T_Node>
 struct Delete : mixins::SureIAmThat<T_Node, Delete> {
     using mixins::SureIAmThat<T_Node, Delete>::self;
 
-    void remove() {
+    void remove(std::shared_ptr<T_Node> &root) {
         if (self().childCount() == 0) {
-            self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+            if (self().parent) {
+                self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+            } else {
+                root = nullptr;
+            }
         } else if (self().childCount() == 1) {
-            self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+            if (self().parent) {
+                self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+            } else {
+                root = self().getAnyChild();
+            }
         } else if (self().childCount() == 2) {
             T_Node *toReplace = to_ptr(self().right);
             while (toReplace->left)
                 toReplace = to_ptr(toReplace->left);
             copyAll(self(), *toReplace);
-            toReplace->remove();
+            toReplace->remove(root);
         }
+    }
+};
+
+template<typename T_Node>
+struct SharedThis : mixins::SureIAmThat<T_Node, SharedThis>, std::enable_shared_from_this<T_Node> {
+};
+
+template<typename T_Node>
+struct Rotator : mixins::SureIAmThat<T_Node, Rotator> {
+    using mixins::SureIAmThat<T_Node, Rotator>::self;
+
+    void rotate(Direction direction) {
+        Direction revDirection = direction == Direction::left ? Direction::right : Direction::left;
+        auto pivot = self().shared_from_this();
+        auto parent = self().parent;
+        auto child = self().getChild(revDirection)->shared_from_this();
+        auto grandChild = child->getChild(direction);
+
+        if (parent) {
+            Direction parentDir = getChildDirection(parent, pivot.get());
+            (*parent).*(BinaryNode<T_Node>::directionToMember(parentDir)) = child;
+        }
+        child->parent = parent;
+
+        pivot->parent = to_ptr(child);
+
+        (*pivot).*(BinaryNode<T_Node>::directionToMember(revDirection)) = grandChild;
+        if (grandChild)
+            grandChild->parent = to_ptr(pivot);
+
+        (*child).*(BinaryNode<T_Node>::directionToMember(direction)) = pivot;
+
+        updateAll(*pivot);
+        updateAll(*child);
+        if (parent)
+            updateAll(*parent);
+    }
+
+    void rotateLeft() {
+        rotate(Direction::left);
+    }
+
+    void rotateRight() {
+        rotate(Direction::right);
     }
 };
 
 #include <fstream>
 
-auto main() -> signed {
-    using NodeType = mixins::Mixins<
-            ValueNode<char>::Inner,
-            BubbleUp,
-            BinaryNode,
-            GraphViz,
-            MaxDepth,
-            FilteredSizeCounter<char, '\n'>::Inner,
-            SizeCounter,
-            Indexable,
-            Insert,
-            Delete>;
+template<typename T_Node>
+using NewLineCounter = FilteredSizeCounter<char, '\n'>::Inner<T_Node>;
 
-    NodeType node;
-    node.setValue(4);
-    node.generateGraph();
+template<typename T_Node>
+using CharValueNode = ValueNode<char>::Inner<T_Node>;
+
+using NodeType = mixins::Mixins<
+        CharValueNode,
+        ParentNode,
+        GetIndex,
+        BubbleUp,
+        BinaryNode,
+        GraphViz,
+        MaxDepth,
+        NewLineCounter,
+        SizeCounter,
+        Indexable,
+        Insert,
+        Delete,
+        SharedThis,
+        Rotator,
+        PushBack>;
+
+template<typename T_Node>
+constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
+
+template<typename T_Node>
+constexpr auto NormalSize = &SizeCounter<T_Node>::size;
+
+
+#ifndef sample
+auto main() -> signed {
+
+    auto node = std::make_shared<NodeType>();
+    node->setValue(4);
+    node->generateGraph();
 //    node.find<&FilteredSizeCounter<char, '\n'>::Inner<NodeType>::size>(0);
-    auto t = node.find<&SizeCounter<NodeType>::size>(0);
+    auto t = node->find<&SizeCounter<NodeType>::size>(0);
     std::cout << t.getValue() << std::endl;
 
     std::shared_ptr<NodeType> node2 = std::make_shared<NodeType>();
-    node.setChild<Direction::right>(node2);
-    node.right->setValue(99);
+    node->setChild<Direction::right>(node2)->setValue(99);
 
-    for (int i = 1; i < 8; ++i) {
-        node.right->insert(std::make_shared<NodeType>()).setValue(i);
+    node->right->setChild(Direction::right, std::make_shared<NodeType>())->setValue(98);
+    node->right->right->setChild(Direction::right, std::make_shared<NodeType>())->setValue(97);
+
+//    node = node->insert(std::make_shared<NodeType>()).setValue(42).shared_from_this();
+
+    system("rm -rf file*.dot file*.png");
+    for (int i = 0; i < 8; ++i) {
+        if (i != 0)
+            node->right->insert(std::make_shared<NodeType>()).setValue(i);
         if (i == 3 || i == 7) {
             std::ofstream fs("file" + std::to_string(i) + "-d.dot");
-            node.generateGraph(fs);
+            node->generateGraph(fs);
             fs.close();
             system(("dot -T png < file" + std::to_string(i) + "-d.dot > image" + std::to_string(i) + "-d.png").c_str());
-
-            node.right->remove();
+            node->right->remove(node);
         }
+
+        if (i == 4) {
+            std::ofstream fs("file" + std::to_string(i) + "-r.dot");
+            node->generateGraph(fs);
+            fs.close();
+            system(("dot -T png < file" + std::to_string(i) + "-r.dot > image" + std::to_string(i) + "-r.png").c_str());
+            node->right->rotateLeft();
+        }
+
         std::ofstream fs("file" + std::to_string(i) + ".dot");
-        node.generateGraph(fs);
+        node->generateGraph(fs);
         fs.close();
         system(("dot -T png < file" + std::to_string(i) + ".dot > image" + std::to_string(i) + ".png").c_str());
     }
 
     for (int i = 0; i < 7; ++i) {
-        std::cout << int(node.find<&SizeCounter<NodeType>::size>(i).getValue()) << std::endl;
+        std::cout << int(node->find<&SizeCounter<NodeType>::size>(i).getValue()) << std::endl;
     }
-    updateAll(node);
     return 0;
 }
+
+#endif
