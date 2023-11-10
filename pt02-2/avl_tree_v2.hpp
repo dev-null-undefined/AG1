@@ -649,6 +649,21 @@ struct PushBack : mixins::SureIAmThat<T_Node, PushBack> {
     }
 };
 
+
+template<typename T_Node>
+struct InsertAt : mixins::SureIAmThat<T_Node, InsertAt>, PushBack<T_Node>, Insert<T_Node> {
+    using mixins::SureIAmThat<T_Node, InsertAt>::self;
+
+    template<auto size_counter>
+    T_Node &insert(size_t index, std::shared_ptr<T_Node> node) {
+        if (index == self().*size_counter)
+            return self().pushBack(node);
+        auto &toInsert = self().template find<size_counter>(index);
+        return toInsert.Insert<T_Node>::insert(node);
+    }
+};
+
+
 template<typename T_Node>
 struct Delete : mixins::SureIAmThat<T_Node, Delete> {
     using mixins::SureIAmThat<T_Node, Delete>::self;
@@ -738,11 +753,10 @@ using NodeType = mixins::Mixins<
         NewLineCounter,
         SizeCounter,
         Indexable,
-        Insert,
         Delete,
         SharedThis,
         Rotator,
-        PushBack>;
+        InsertAt>;
 
 template<typename T_Node>
 constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
