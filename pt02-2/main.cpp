@@ -109,6 +109,9 @@ struct TextEditorBackend {
 
     size_t char_to_line(size_t i) const {
         assertIndex(i);
+        if (i == 0) {
+            return 0;
+        }
         auto node = root->find<NormalSize<NodeType>>(i);
         return node.getIndex<NewLineCounterSize<NodeType>>() - (node.getValue() == '\n');
     }
