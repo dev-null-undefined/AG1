@@ -81,12 +81,7 @@ struct TextEditorBackend {
             root->setValue(c);
             return;
         }
-        if (i == size()) {
-            root->pushBack(std::make_shared<NodeType>()).setValue(c);
-            return;
-        }
-        auto &node = root->find<NormalSize<NodeType>>(i);
-        node.insert(std::make_shared<NodeType>()).setValue(c);
+        root->insert<NormalSize<NodeType>>(i, std::make_shared<NodeType>()).setValue(c);
     }
 
     void erase(size_t i) {
