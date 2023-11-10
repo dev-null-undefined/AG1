@@ -207,6 +207,26 @@ void test3(int &ok, int &fail) {
     CHECK(t.line_start(0), 0);
     CHECK(t.line_length(0), 12);
 
+
+    TextEditorBackend t2("\nasdfasdfasdf");
+
+    CHECK(t2.size(), 13);
+    CHECK(text(t2), "\nasdfasdfasdf");
+    CHECK(t2.lines(), 2);
+    CHECK_ALL(t2.char_to_line, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+    CHECK(t2.line_start(0), 0);
+    CHECK(t2.line_length(0), 1);
+    CHECK(t2.line_start(1), 1);
+    CHECK(t2.line_length(1), 12);
+
+    TextEditorBackend t3("");
+
+    CHECK(t3.size(), 0);
+    CHECK(t3.lines(), 1);
+    CHECK_ALL(t3.char_to_line, 0);
+    CHECK(t3.line_start(0), 0);
+    CHECK(t3.line_length(0), 0);
+
     t.insert(0, '\n');
     CHECK(t.size(), 13);
     CHECK(text(t), "\nasdfasdfasdf");
