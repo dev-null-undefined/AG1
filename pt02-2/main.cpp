@@ -22,6 +22,7 @@
 
 #endif
 
+// region mixins
 namespace detail {
     template<typename... Args>
     struct next_type;
@@ -207,6 +208,10 @@ decltype(auto) to_ptr(T *something) {
     return something;
 }
 
+enum class Direction {
+    left, right
+};
+
 template<typename T_Node>
 struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
     using mixins::SureIAmThat<T_Node, ParentNode>::self;
@@ -214,9 +219,6 @@ struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
     T_Node *parent = nullptr;
 };
 
-enum class Direction {
-    left, right
-};
 
 template<typename T_Node>
 struct Balancer : mixins::SureIAmThat<T_Node, Balancer> {
@@ -242,10 +244,11 @@ struct Balancer : mixins::SureIAmThat<T_Node, Balancer> {
 };
 
 template<typename T_Node>
-struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp>, ParentNode<T_Node> {
+struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp> {
     using mixins::SureIAmThat<T_Node, BubbleUp>::self;
 
     void bubbleUp() {
+        static_assert(mixins::Mixin<T_Node, ParentNode>, "ParentNode mixin is required");
         T_Node *current = to_ptr(&self());
         while (current) {
             updateAll(*to_ptr(current));
@@ -294,8 +297,12 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         } else {
             right = child;
         }
-        child->parent = &self();
-        child->bubbleUp();
+        if (child != nullptr) {
+            child->parent = &self();
+            child->bubbleUp();
+        } else {
+            self().bubbleUp();
+        }
         return child;
     }
 
@@ -327,6 +334,13 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
     std::shared_ptr<T_Node> left = nullptr, right = nullptr;
 };
 
+template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
+Direction getChildDirection(const T_Node *parent, const T_Node *child) {
+    if (to_ptr(parent->left) == child)
+        return Direction::left;
+    return Direction::right;
+}
+
 template<typename T_Node>
 struct Debug : mixins::SureIAmThat<T_Node, Debug> {
     using mixins::SureIAmThat<T_Node, Debug>::self;
@@ -340,6 +354,14 @@ public:
         return buffer + "\"";
     }
 };
+
+#ifndef __PROGTEST__
+
+#include <fstream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+#endif
 
 template<typename T_Node>
 struct GraphViz : mixins::SureIAmThat<T_Node, GraphViz>, Debug<T_Node> {
@@ -383,6 +405,22 @@ public:
 
         output << "}\n" << std::flush;
     }
+
+#ifndef __PROGTEST__
+
+    void generateGraph(const std::string &filename) {
+
+        auto tmpDir = fs::temp_directory_path();
+        auto tmpFile = tmpDir / (filename + ".dot");
+        std::ofstream output(tmpFile);
+        generateGraph(output);
+        output.close();
+        system(("dot -T png < " + tmpFile.string() + " > " + filename + ".png").c_str());
+        fs::remove(tmpFile);
+    }
+
+#endif
+
 };
 
 template<typename T>
@@ -395,8 +433,8 @@ struct ValueNode {
         T _value;
 
     public:
-        T mixinInfo() {
-            return _value;
+        auto mixinInfo() {
+            return _value == '\n' ? "\\n" : std::string(1, _value);
         }
 
         const T &getValue() const {
@@ -516,13 +554,28 @@ private:
     }
 
     template<auto size_counter>
+    T_Node &_find(size_t index) {
+        T_Node *current = &self();
+        while (true) {
+            if (index == _currentIndex<size_counter>(current) && _isCurrent<size_counter>(current))
+                return *current;
+
+            if (index < _currentIndex<size_counter>(current)) {
+                current = to_ptr(current->left);
+            } else if (index >= _currentIndex<size_counter>(current)) {
+                index -= _currentIndex<size_counter>(current);
+                current = to_ptr(current->right);
+            }
+        }
+    }
+
+    template<auto size_counter>
     size_t _currentIndex(const T_Node *current) const {
         size_t index = current->*size_counter;
         if (current->right)
             index -= to_ptr(current->right)->*size_counter;
         return index;
     }
-
 
     template<auto size_counter>
     bool _isCurrent(const T_Node *current) const {
@@ -543,7 +596,46 @@ public:
                                     std::to_string(self().*size_counter));
         return _find<size_counter>(index + 1);
     }
+
+    template<auto size_counter>
+    T_Node &find(size_t index) {
+        if (index >= self().*size_counter)
+            throw std::out_of_range("Index out of range " + std::to_string(index) + " maximum is " +
+                                    std::to_string(self().*size_counter));
+        return _find<size_counter>(index + 1);
+    }
 };
+
+
+template<typename T_Node>
+struct GetIndex : mixins::SureIAmThat<T_Node, GetIndex> {
+    using mixins::SureIAmThat<T_Node, GetIndex>::self;
+
+private:
+    // TODO: remove repeating code
+    template<auto size_counter>
+    size_t _currentIndex(const T_Node *current) const {
+        size_t index = current->*size_counter;
+        if (current->right)
+            index -= to_ptr(current->right)->*size_counter;
+        return index;
+    }
+
+public:
+    template<auto size_counter>
+    size_t getIndex() const {
+        const T_Node *current = &self();
+        size_t index = _currentIndex<size_counter>(current);
+        while (current->parent) {
+            if (getChildDirection(current->parent, current) == Direction::right) {
+                index += _currentIndex<size_counter>(current->parent);
+            }
+            current = current->parent;
+        }
+        return index;
+    }
+};
+
 
 template<typename T_Node>
 struct Insert : mixins::SureIAmThat<T_Node, Insert> {
@@ -564,28 +656,46 @@ struct Insert : mixins::SureIAmThat<T_Node, Insert> {
     }
 };
 
-template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
-Direction getChildDirection(T_Node *parent, T_Node *child) {
-    if (to_ptr(parent->left) == child)
-        return Direction::left;
-    return Direction::right;
-}
+
+template<typename T_Node>
+struct PushBack : mixins::SureIAmThat<T_Node, PushBack> {
+    using mixins::SureIAmThat<T_Node, PushBack>::self;
+
+    T_Node &pushBack(std::shared_ptr<T_Node> node) {
+        T_Node *toInsert = to_ptr(&self());
+        while (toInsert->template getChild<Direction::right>()) {
+            toInsert = to_ptr(toInsert->template getChild<Direction::right>());
+        }
+        auto aux = std::make_shared<T_Node>();
+        copyAll(*aux, *node);
+        toInsert->template setChild<Direction::right>(aux);
+        return *aux;
+    }
+};
 
 template<typename T_Node>
 struct Delete : mixins::SureIAmThat<T_Node, Delete> {
     using mixins::SureIAmThat<T_Node, Delete>::self;
 
-    void remove() {
+    void remove(std::shared_ptr<T_Node> &root) {
         if (self().childCount() == 0) {
-            self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+            if (self().parent) {
+                self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+            } else {
+                root = nullptr;
+            }
         } else if (self().childCount() == 1) {
-            self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+            if (self().parent) {
+                self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+            } else {
+                root = self().getAnyChild();
+            }
         } else if (self().childCount() == 2) {
             T_Node *toReplace = to_ptr(self().right);
             while (toReplace->left)
                 toReplace = to_ptr(toReplace->left);
             copyAll(self(), *toReplace);
-            toReplace->remove();
+            toReplace->remove(root);
         }
     }
 };
@@ -634,26 +744,132 @@ struct Rotator : mixins::SureIAmThat<T_Node, Rotator> {
     }
 };
 
+
+template<typename T_Node>
+using NewLineCounter = FilteredSizeCounter<char, '\n'>::Inner<T_Node>;
+
+template<typename T_Node>
+using CharValueNode = ValueNode<char>::Inner<T_Node>;
+
+using NodeType = mixins::Mixins<
+        CharValueNode,
+        ParentNode,
+        GetIndex,
+        BubbleUp,
+        BinaryNode,
+        GraphViz,
+        MaxDepth,
+        NewLineCounter,
+        SizeCounter,
+        Indexable,
+        Insert,
+        Delete,
+        SharedThis,
+        Rotator,
+        PushBack>;
+
+template<typename T_Node>
+constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
+
+template<typename T_Node>
+constexpr auto NormalSize = &SizeCounter<T_Node>::size;
+//endregion
+
 struct TextEditorBackend {
-    TextEditorBackend(const std::string &text);
 
-    size_t size() const;
+    void assertIndex(size_t i, size_t max) const {
+        if (!root && i != 0) {
+            throw std::out_of_range("Index out of range " + std::to_string(i) + " maximum is " +
+                                    std::to_string(0));
+        }
 
-    size_t lines() const;
+        if (i > max) {
+            throw std::out_of_range("Index out of range " + std::to_string(i) + " maximum is " +
+                                    std::to_string(max - 1));
+        }
+    }
 
-    char at(size_t i) const;
+    void assertIndex(size_t i) const {
+        assertIndex(i, size());
+    }
 
-    void edit(size_t i, char c);
+    TextEditorBackend(const std::string &text) {
+        for (char c: text) {
+            insert(size(), c);
+        }
+    }
 
-    void insert(size_t i, char c);
+    size_t size() const {
+        if (!root) {
+            return 0;
+        }
+        return root->SizeCounter<NodeType>::size;
+    }
 
-    void erase(size_t i);
+    size_t lines() const {
+        if (!root) {
+            return 1;
+        }
+        return root->NewLineCounter<NodeType>::size + 1;
+    }
 
-    size_t line_start(size_t r) const;
+    char at(size_t i) const {
+        assertIndex(i);
+        auto node = root->find<NormalSize<NodeType>>(i);
+        return node.getValue();
+    }
 
-    size_t line_length(size_t r) const;
+    void edit(size_t i, char c) {
+        assertIndex(i);
+        auto &node = root->find<NormalSize<NodeType>>(i);
+        node.setValue(c);
+    }
 
-    size_t char_to_line(size_t i) const;
+    void insert(size_t i, char c) {
+        assertIndex(i);
+        if (!root) {
+            root = std::make_shared<NodeType>();
+            root->setValue(c);
+            return;
+        }
+        if (i == size()) {
+            root->pushBack(std::make_shared<NodeType>()).setValue(c);
+            return;
+        }
+        auto &node = root->find<NormalSize<NodeType>>(i);
+        node.insert(std::make_shared<NodeType>()).setValue(c);
+    }
+
+    void erase(size_t i) {
+        assertIndex(i);
+        auto node = root->find<NormalSize<NodeType>>(i);
+        node.remove(root);
+    }
+
+    size_t line_start(size_t r) const {
+        assertIndex(r, lines());
+        if (r == 0) {
+            return 0;
+        }
+        auto node = root->find<NewLineCounterSize<NodeType>>(r - 1);
+        return node.getIndex<NormalSize<NodeType>>();
+    }
+
+    size_t line_length(size_t r) const {
+        assertIndex(r, lines());
+        if (r + 1 == lines()) {
+            return size() - line_start(r);
+        }
+        return line_start(r + 1) - line_start(r);
+    }
+
+    size_t char_to_line(size_t i) const {
+        assertIndex(i);
+        auto node = root->find<NormalSize<NodeType>>(i);
+        return node.getIndex<NewLineCounterSize<NodeType>>() - (node.getValue() == '\n');
+    }
+
+    std::shared_ptr<NodeType> root = nullptr;
 };
 
 #ifndef __PROGTEST__
@@ -798,14 +1014,18 @@ void test_ex(int &ok, int &fail) {
 }
 
 int main() {
-    int ok = 0, fail = 0;
-    if (!fail) test1(ok, fail);
-    if (!fail) test2(ok, fail);
-    if (!fail) test3(ok, fail);
-    if (!fail) test_ex(ok, fail);
+    try {
+        int ok = 0, fail = 0;
+        if (!fail) test1(ok, fail);
+        if (!fail) test2(ok, fail);
+        if (!fail) test3(ok, fail);
+        if (!fail) test_ex(ok, fail);
 
-    if (!fail) std::cout << "Passed all " << ok << " tests!" << std::endl;
-    else std::cout << "Failed " << fail << " of " << (ok + fail) << " tests." << std::endl;
+        if (!fail) std::cout << "Passed all " << ok << " tests!" << std::endl;
+        else std::cout << "Failed " << fail << " of " << (ok + fail) << " tests." << std::endl;
+    } catch (...) {
+        std::cout << "Unexpected exception thrown." << std::endl;
+    }
 }
 
 #endif
