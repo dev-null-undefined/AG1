@@ -111,7 +111,7 @@ namespace mixins {
             return *static_cast<K *>(this);
         }
 
-        const K &self() const {
+        [[nodiscard]] const K &self() const {
             return *static_cast<const K *>(this);
         }
     };
@@ -601,7 +601,7 @@ private:
 
 public:
     template<auto size_counter = NormalSize<T_Node>>
-    size_t getIndex() const {
+    [[nodiscard]] size_t getIndex() const {
         const T_Node *current = &self();
         size_t index = _currentIndex<size_counter>(current);
         while (current->parent) {
@@ -765,7 +765,7 @@ struct Tree {
         using mixins::SureIAmThat<T_Tree, Size>::self;
 
         template<auto size_counter = default_size_counter>
-        size_t getSize() const {
+        [[nodiscard]] size_t getSize() const {
             if (self().root)
                 return (*to_ptr(self().root)).*size_counter;
             return 0;
@@ -843,7 +843,6 @@ struct Tree {
         }
     };
 };
-
 
 using AVLTree = mixins::Mixins<
         Tree<NodeType>::Inner,
