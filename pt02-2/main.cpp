@@ -344,8 +344,8 @@ try {\
 auto line_length_ref = ref.line_length(i);\
 try {\
 auto line_length = sol.line_length(i);\
-CHECK(line_length, line_length_ref);            \
 if(line_length != line_length_ref)     std::cout << "Index: " << i << " failed line length" << std::endl;              \
+CHECK(line_length, line_length_ref);            \
 } catch (const std::out_of_range &e) {\
 fail++;\
 std::cout << "Line " << __LINE__ << ": Throwed after line_lenght (" << i << ") but should not throw." << std::endl;\
@@ -358,6 +358,7 @@ try {\
 auto line_start_ref = ref.line_start(i);\
 try {\
 auto line_start = sol.line_start(i);\
+if(line_start != line_start_ref)     std::cout << "Index: " << i << " failed line start" << std::endl;              \
 CHECK(line_start, line_start_ref);\
 } catch (const std::out_of_range &e) {\
 fail++;\
@@ -401,8 +402,8 @@ return;\
 // endregion
 
 void insert(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
-    int pos = RNG() % (sol.size() + 20);
-    char c = RNG() % 10 == 0 ? '\n' : ('a' + (RNG() % 26));
+    int pos = int(int(RNG()) % (sol.size() + 20));
+    char c = char(RNG() % 10 == 0 ? '\n' : ('a' + char(RNG() % 26)));
     try {
         ref.insert(pos, c);
         try {
@@ -429,75 +430,30 @@ std::vector<std::function<void(int &, X &, TextEditorBackend &,
 };
 
 void test_vs_ref(int &ok, X &fail) {
-    for (int i = 0; i < 20; ++i) {
-        std::string s = "";
-        for (int j = 0; j < RNG() % 3; ++j) {
+    for (int i = 0; i < 100; ++i) {
+        std::string s;
+        for (int j = 0; j < RNG() % 10; ++j) {
             if (RNG() % 3 == 0)
                 s.push_back('\n');
             else
-                s.push_back('a' + (RNG() % 26));
+                s.push_back(char('a' + (RNG() % 26)));
         }
 
         TextEditorBackend t(s);
         reference::TextEditorBackend t2(s);
 
-        for (int j = 0; j < 10; ++j) {
+        root = t.root.get();
+        for (int j = 0; j < 20; ++j) {
             referenceOperation[RNG() % referenceOperation.size()](ok, fail, t, t2);
         }
     }
 }
 
-void test4(int &ok, X &fail) {
-    TextEditorBackend t("");
-    CHECK(text(t), "");
-    CHECK(t.size(), 0);
-    CHECK(t.lines(), 1);
-    CHECK_ALL(t.line_start, 0);
-    CHECK_ALL(t.line_length, 0);
-
-    t.insert(0, '\n');
-    root = t.root.get();
-    CHECK(text(t), "\n");
-    CHECK(t.size(), 1);
-    CHECK(t.lines(), 2);
-    CHECK_ALL(t.line_start, 0, 1);
-    CHECK_ALL(t.line_length, 1, 0);
-    CHECK_ALL(t.char_to_line, 0);
-
-    t.insert(0, '\n');
-    t.insert(1, '\n');
-    t.insert(1, '\n');
-    CHECK(text(t), "\n\n\n\n");
-    CHECK(t.size(), 4);
-    CHECK(t.lines(), 5);
-    CHECK_ALL(t.line_start, 0, 1, 2, 3, 4);
-    CHECK_ALL(t.line_length, 1, 1, 1, 1, 0);
-    CHECK_ALL(t.char_to_line, 0, 1, 2, 3);
-
-    t.erase(0);
-    t.erase(1);
-    t.erase(1);
-    t.erase(0);
-    CHECK(text(t), "");
-    CHECK(t.size(), 0);
-    CHECK(t.lines(), 1);
-    CHECK_ALL(t.line_start, 0);
-    CHECK_ALL(t.line_length, 0);
-
-    t.insert(0, '\n');
-    CHECK(text(t), "\n");
-    CHECK(t.size(), 1);
-    CHECK(t.lines(), 2);
-    CHECK_ALL(t.line_start, 0, 1);
-    CHECK_ALL(t.line_length, 1, 0);
-    CHECK_ALL(t.char_to_line, 0);
-}
 
 std::vector<std::function<void(int &, X &)>> tests = {
-//        test1,
-//        test2,
-//        test3,
-        test4,
+        test1,
+        test2,
+        test3,
         test_ex,
         test_vs_ref
 };
