@@ -19,4 +19,10 @@ add_executable(ag1_avl_tree pt02/avl_tree_tester.cpp)
 project(ag1_progtest_02_2)
 add_executable(ag1_progtest_02_2 pt02-2/main.cpp)
 
+project(ag1_progtest_02_2_testing)
+add_executable(ag1_progtest_02_2_testing pt02-2/testing.cpp)
+
+project(ag1_progtest_02_2_giga_chad_tester)
+add_executable(ag1_progtest_02_2_giga_chad_tester pt02-2/tester_vec.cpp)
+
 project(AG1)
