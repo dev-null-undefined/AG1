@@ -194,6 +194,10 @@ enum class Direction {
 };
 
 template<typename T_Node>
+struct SharedThis : mixins::SureIAmThat<T_Node, SharedThis>, std::enable_shared_from_this<T_Node> {
+};
+
+template<typename T_Node>
 struct ParentNode : mixins::SureIAmThat<T_Node, ParentNode> {
     using mixins::SureIAmThat<T_Node, ParentNode>::self;
 
@@ -308,10 +312,27 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
     std::shared_ptr<T_Node> left = nullptr, right = nullptr;
 };
 
+template<typename T_Node>
+struct Equals : mixins::SureIAmThat<T_Node, Equals> {
+    using mixins::SureIAmThat<T_Node, Equals>::self;
+
+    bool equals(const T_Node *other) const {
+        if constexpr (requires { requires mixins::Mixin<T_Node, SharedThis>; }) {
+            return other->shared_from_this() == self().shared_from_this();
+        }
+        return other == this;
+    }
+};
+
 template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
-Direction getChildDirection(const T_Node *parent, const T_Node *child) {
-    if (to_ptr(parent->left) == child)
-        return Direction::left;
+Direction getChildDirection(const T_Node *child) {
+    if constexpr (requires { requires mixins::Mixin<T_Node, Equals>; }) {
+        if (child->parent->left && to_ptr(child->parent->left)->equals(child))
+            return Direction::left;
+    } else {
+        if (to_ptr(child->parent->left) == (child))
+            return Direction::left;
+    }
     return Direction::right;
 }
 
@@ -515,12 +536,21 @@ private:
     const T_Node &_find(size_t index) const {
         const T_Node *current = &self();
         while (true) {
-            if (index == _currentIndex<size_counter>(current) && _isCurrent<size_counter>(current))
-                return *current;
+            if (index == _currentIndex<size_counter>(current)) {
+                if (_isCurrent<size_counter>(current))
+                    return *current;
+                if (index == _currentIndex<size_counter>(to_ptr(current->left))) {
+                    current = to_ptr(current->left);
+                    continue;
+                } else {
+                    current = to_ptr(current->right);
+                    continue;
+                }
+            }
 
             if (index < _currentIndex<size_counter>(current)) {
                 current = to_ptr(current->left);
-            } else if (index >= _currentIndex<size_counter>(current)) {
+            } else /* if (index > _currentIndex<size_counter>(current)) */ {
                 index -= _currentIndex<size_counter>(current);
                 current = to_ptr(current->right);
             }
@@ -534,6 +564,7 @@ private:
 
     template<auto size_counter>
     size_t _currentIndex(const T_Node *current) const {
+        if (!current) return 0;
         size_t index = current->*size_counter;
         if (current->right)
             index -= to_ptr(current->right)->*size_counter;
@@ -587,7 +618,7 @@ public:
         const T_Node *current = &self();
         size_t index = _currentIndex<size_counter>(current);
         while (current->parent) {
-            if (getChildDirection(current->parent, current) == Direction::right) {
+            if (getChildDirection(current) == Direction::right) {
                 index += _currentIndex<size_counter>(current->parent);
             }
             current = current->parent;
@@ -655,13 +686,13 @@ struct Delete : mixins::SureIAmThat<T_Node, Delete> {
     void remove(std::shared_ptr<T_Node> &root) {
         if (self().childCount() == 0) {
             if (self().parent) {
-                self().parent->setChild(getChildDirection(self().parent, &self()), nullptr);
+                self().parent->setChild(getChildDirection(&self()), nullptr);
             } else {
                 root = nullptr;
             }
         } else if (self().childCount() == 1) {
             if (self().parent) {
-                self().parent->setChild(getChildDirection(self().parent, &self()), self().getAnyChild());
+                self().parent->setChild(getChildDirection(&self()), self().getAnyChild());
             } else {
                 root = self().getAnyChild();
             }
@@ -673,10 +704,6 @@ struct Delete : mixins::SureIAmThat<T_Node, Delete> {
             toReplace->remove(root);
         }
     }
-};
-
-template<typename T_Node>
-struct SharedThis : mixins::SureIAmThat<T_Node, SharedThis>, std::enable_shared_from_this<T_Node> {
 };
 
 template<typename T_Node>
@@ -740,7 +767,8 @@ using NodeType = mixins::Mixins<
         Delete,
         SharedThis,
         Rotator,
-        InsertAt>;
+        InsertAt,
+        Equals>;
 
 template<typename T_Node>
 constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
