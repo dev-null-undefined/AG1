@@ -40,6 +40,17 @@ struct TextEditorBackend {
         assertIndex(i, size());
     }
 
+    void assertStrictIndex(size_t i, size_t max) const {
+        if (i >= max) {
+            throw std::out_of_range("Index out of range " + std::to_string(i) + " maximum is " +
+                                    std::to_string(size() - 1));
+        }
+    }
+
+    void assertStrictIndex(size_t i) const {
+        assertStrictIndex(i, size());
+    }
+
     TextEditorBackend(const std::string &text) {
         for (char c: text) {
             insert(size(), c);
@@ -61,13 +72,13 @@ struct TextEditorBackend {
     }
 
     char at(size_t i) const {
-        assertIndex(i);
+        assertStrictIndex(i);
         auto node = root->find<NormalSize<NodeType>>(i);
         return node.getValue();
     }
 
     void edit(size_t i, char c) {
-        assertIndex(i);
+        assertStrictIndex(i);
         auto &node = root->find<NormalSize<NodeType>>(i);
         node.setValue(c);
     }
@@ -83,7 +94,7 @@ struct TextEditorBackend {
     }
 
     void erase(size_t i) {
-        assertIndex(i);
+        assertStrictIndex(i);
         auto &node = root->find<NormalSize<NodeType>>(i);
         node.remove(root);
     }
@@ -401,38 +412,72 @@ return;\
 
 // endregion
 
-void insert(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
-    int pos = int(int(RNG()) % (sol.size() + 20));
-    char c = char(RNG() % 10 == 0 ? '\n' : ('a' + char(RNG() % 26)));
-    try {
-        ref.insert(pos, c);
-        try {
-            sol.insert(pos, c);
-        } catch (const std::out_of_range &e) {
-            fail++;
-            std::cout << "Line " << __LINE__ << ": Throwed after insert (" << pos << ", " << quote(c)
-                      << ") but should not throw." << std::endl;
-        }
-    } catch (const std::out_of_range &e) {
-        CHECK_EX_C(sol.insert(pos, c), std::out_of_range, " (" + std::to_string(pos) + ", " + quote(c) + ")");
-        return;
-    }
-    std::string s = text(sol);
+
+
+int rngPos(int max, int overShoot = 20) {
+    return RNG() % (max + overShoot);
+}
+
+char rngChar() {
+    return char(RNG() % 10 == 0 ? '\n' : ('a' + char(RNG() % 26)));
+}
+
+#define CHECK_OP_(expr, expr_str, ctx) do { \
+try {\
+ref.expr;\
+try {\
+sol.expr;\
+} catch (const std::out_of_range &e) {\
+fail++;\
+std::cout << "Line " << __LINE__ << ": Throwed after " expr_str "" << ctx\
+<< " but should not throw." << std::endl;\
+}\
+} catch (const std::out_of_range &e) {\
+CHECK_EX_C(sol.expr, std::out_of_range, ctx);\
+return;\
+}                                          \
+} while (0);
+
+#define CHECK_OP(expr, ctx) CHECK_OP_(expr, #expr,ctx)
+
+void print(const TextEditorBackend &t) {
+    std::string s = text(t);
     std::replace(s.begin(), s.end(), '\n', '*');
     std::cout << s << std::endl;
+}
+
+void insert(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
+    int pos = rngPos(ref.size(), 20);
+    char c = rngChar();
+    CHECK_OP(insert(pos, c), " (" + std::to_string(pos) + ", " + quote(c) + ")")
+    print(sol);
     TEST_ALL()
 }
 
+void erase(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
+    int pos = rngPos(ref.size(), 20);
+    CHECK_OP(erase(pos), " (" + std::to_string(pos) + ")")
+    print(sol);
+    TEST_ALL()
+}
+
+void edit(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
+    int pos = rngPos(ref.size(), 20);
+    char c = rngChar();
+    CHECK_OP(edit(pos, c), " (" + std::to_string(pos) + ", " + quote(c) + ")")
+    print(sol);
+    TEST_ALL()
+}
 
 std::vector<std::function<void(int &, X &, TextEditorBackend &,
                                reference::TextEditorBackend &)>> referenceOperation = {
-        insert
+        insert, erase, edit
 };
 
 void test_vs_ref(int &ok, X &fail) {
     for (int i = 0; i < 100; ++i) {
         std::string s;
-        for (int j = 0; j < RNG() % 10; ++j) {
+        for (int j = 0; j < RNG() % 20; ++j) {
             if (RNG() % 3 == 0)
                 s.push_back('\n');
             else
@@ -443,7 +488,7 @@ void test_vs_ref(int &ok, X &fail) {
         reference::TextEditorBackend t2(s);
 
         root = t.root.get();
-        for (int j = 0; j < 20; ++j) {
+        for (int j = 0; j < 100; ++j) {
             referenceOperation[RNG() % referenceOperation.size()](ok, fail, t, t2);
         }
     }
