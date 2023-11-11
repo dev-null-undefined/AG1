@@ -57,45 +57,34 @@ struct TextEditorBackend {
     }
 
     size_t size() const {
-        if (!root) {
-            return 0;
-        }
-        return root->SizeCounter<NodeType>::size;
+        return tree.getSize();
     }
 
     size_t lines() const {
-        if (!root) {
-            return 1;
-        }
-        return root->NewLineCounter<NodeType>::size + 1;
+        return tree.getSize<AVLTreeNewLineCounterSize<AVLTree>>() + 1;
     }
 
     char at(size_t i) const {
         assertStrictIndex(i);
-        auto node = root->find<NormalSize<NodeType>>(i);
+        auto node = tree.find(i);
         return node.getValue();
     }
 
     void edit(size_t i, char c) {
         assertStrictIndex(i);
-        auto &node = root->find<NormalSize<NodeType>>(i);
+        auto &node = tree.find(i);
         node.setValue(c);
     }
 
     void insert(size_t i, char c) {
         assertIndex(i);
-        if (!root) {
-            root = std::make_shared<NodeType>();
-            root->setValue(c);
-            return;
-        }
-        root->insert<NormalSize<NodeType>>(i, std::make_shared<NodeType>()).setValue(c);
+        tree.insert(i, std::make_shared<AVLTree::NodeType>()).setValue(c);
     }
 
     void erase(size_t i) {
         assertStrictIndex(i);
-        auto &node = root->find<NormalSize<NodeType>>(i);
-        node.remove(root);
+        auto &node = tree.find(i);
+        tree.remove(node);
     }
 
     size_t line_start(size_t r) const {
@@ -103,8 +92,8 @@ struct TextEditorBackend {
         if (r == 0) {
             return 0;
         }
-        auto &node = root->find<NewLineCounterSize<NodeType>>(r - 1);
-        return node.getIndex<NormalSize<NodeType>>();
+        auto &node = tree.find<AVLTreeNewLineCounterSize<AVLTree>>(r - 1);
+        return node.getIndex();
     }
 
     size_t line_length(size_t r) const {
@@ -120,9 +109,9 @@ struct TextEditorBackend {
         if (i == 0) {
             return 0;
         }
-        auto &node = root->find<NormalSize<NodeType>>(i);
-        return node.getIndex<NewLineCounterSize<NodeType>>() - (node.getValue() == '\n');
+        auto &node = tree.find(i);
+        return node.getIndex<AVLTreeNewLineCounterSize<AVLTree>>() - (node.getValue() == '\n');
     }
 
-    std::shared_ptr<NodeType> root = nullptr;
+    AVLTree tree;
 };
