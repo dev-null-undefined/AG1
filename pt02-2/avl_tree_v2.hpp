@@ -700,6 +700,88 @@ struct Tree {
         std::shared_ptr<T_Node> root = nullptr;
     };
 
+
+    template<typename T_Tree>
+    struct Rotator : mixins::SureIAmThat<T_Tree, Rotator> {
+        using mixins::SureIAmThat<T_Tree, Rotator>::self;
+
+        void rotate(Direction direction, T_Node &node) {
+            Direction revDirection = direction == Direction::left ? Direction::right : Direction::left;
+            auto pivot = node.shared_from_this();
+            auto parent = node.parent;
+            auto child = node.getChild(revDirection);
+            auto grandChild = child->getChild(direction);
+
+            if (parent) {
+                Direction parentDir = getChildDirection(to_ptr(pivot));
+                (*parent).*(BinaryNode<T_Node>::directionToMember(parentDir)) = child;
+            } else {
+                self().root = child;
+            }
+            child->parent = parent;
+
+            pivot->parent = to_ptr(child);
+
+            (*pivot).*(BinaryNode<T_Node>::directionToMember(revDirection)) = grandChild;
+            if (grandChild)
+                grandChild->parent = to_ptr(pivot);
+
+            (*child).*(BinaryNode<T_Node>::directionToMember(direction)) = pivot;
+
+            updateAll(*pivot);
+            updateAll(*child);
+            if (parent)
+                updateAll(*parent);
+        }
+
+        void rotateLeft(T_Node &node) {
+            rotate(Direction::left, node);
+        }
+
+        void rotateRight(T_Node &node) {
+            rotate(Direction::right, node);
+        }
+
+        template<Direction direction>
+        void rotate(T_Node &node) {
+            if (direction == Direction::left) {
+                rotateLeft(node);
+            } else {
+                rotateRight(node);
+            }
+        }
+    };
+
+    template<typename T_Tree>
+    struct Balancer : mixins::SureIAmThat<T_Tree, Balancer> {
+        using mixins::SureIAmThat<T_Tree, Balancer>::self;
+
+        void balance(T_Node &node) {
+            updateAll(node);
+            int delta = node.getDelta();
+            if (std::abs(delta) > 1) {
+                if (delta > 0) {
+                    if (node.left->getSign() < 0) {
+                        self().rotateLeft(*node.left);
+                    }
+                    self().rotateRight(node);
+                } else {
+                    if (node.right->getSign() > 0) {
+                        self().rotateRight(*node.right);
+                    }
+                    self().rotateLeft(node);
+                }
+            }
+        }
+
+        void balanceUp(T_Node *node) {
+            while (node) {
+                balance(*node);
+                node = node->parent;
+            }
+        }
+    };
+
     template<typename T_Tree>
     struct Indexable : mixins::SureIAmThat<T_Tree, Indexable> {
         using mixins::SureIAmThat<T_Tree, Indexable>::self;
@@ -727,7 +809,11 @@ struct Tree {
                 copyAll(*self().root, *node);
                 return *self().root;
             }
-            return self().root->template insert<size_counter>(index, node);
+            T_Node &inserted = self().root->template insert<size_counter>(index, node);
+            if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
+                self().balanceUp(&inserted);
+            }
+            return inserted;
         }
     };
 
@@ -736,6 +822,7 @@ struct Tree {
         using mixins::SureIAmThat<T_Tree, Delete>::self;
 
         void remove(T_Node &node) {
+            T_Node *parent = node.parent;
             if (node.childCount() == 0) {
                 if (node.parent) {
                     node.parent->setChild(getChildDirection(&node), nullptr);
@@ -755,6 +842,13 @@ struct Tree {
                     toReplace = to_ptr(toReplace->left);
                 copyAll(node, *toReplace);
                 remove(*toReplace);
+                return;
+            }
+
+            if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
+                if (parent) {
+                    self().balanceUp(parent);
+                }
             }
         }
     };
@@ -772,76 +866,6 @@ struct Tree {
         }
     };
 
-
-    template<typename T_Tree>
-    struct Rotator : mixins::SureIAmThat<T_Tree, Rotator> {
-        using mixins::SureIAmThat<T_Tree, Rotator>::self;
-
-        void rotate(Direction direction) {
-            static size_t counter = 0;
-            ++counter;
-            self().generateGraph("rotate" + std::to_string(counter) + "-before");
-            Direction revDirection = direction == Direction::left ? Direction::right : Direction::left;
-            auto pivot = self().shared_from_this();
-            auto parent = self().parent;
-            auto child = self().getChild(revDirection)->shared_from_this();
-            auto grandChild = child->getChild(direction);
-
-            if (parent) {
-                Direction parentDir = getChildDirection(pivot.get());
-                (*parent).*(BinaryNode<T_Tree>::directionToMember(parentDir)) = child;
-            } else {
-                self().root = child;
-            }
-            child->parent = parent;
-
-            pivot->parent = to_ptr(child);
-
-            (*pivot).*(BinaryNode<T_Tree>::directionToMember(revDirection)) = grandChild;
-            if (grandChild)
-                grandChild->parent = to_ptr(pivot);
-
-            (*child).*(BinaryNode<T_Tree>::directionToMember(direction)) = pivot;
-
-            updateAll(*pivot);
-            updateAll(*child);
-            if (parent)
-                updateAll(*parent);
-
-            self().generateGraph("rotate" + std::to_string(counter) + "-after");
-        }
-
-        void rotateLeft() {
-            rotate(Direction::left);
-        }
-
-        void rotateRight() {
-            rotate(Direction::right);
-        }
-    };
-
-    template<typename T_Tree>
-    struct Balancer : mixins::SureIAmThat<T_Tree, Balancer> {
-        using mixins::SureIAmThat<T_Tree, Balancer>::self;
-
-        void balance() {
-            updateAll(self());
-            int delta = self().getDelta();
-            if (std::abs(delta) > 1) {
-                if (delta > 0) {
-                    if (self().left->getSign() < 0) {
-                        self().left->rotateLeft();
-                    }
-                    self().rotateRight();
-                } else {
-                    if (self().right->getSign() > 0) {
-                        self().right->rotateRight();
-                    }
-                    self().rotateLeft();
-                }
-            }
-        }
-    };
 };
 
 using AVLTree = mixins::Mixins<
