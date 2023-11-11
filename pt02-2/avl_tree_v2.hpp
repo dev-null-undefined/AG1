@@ -701,6 +701,7 @@ struct Delete : mixins::SureIAmThat<T_Node, Delete> {
                 self().parent->setChild(getChildDirection(&self()), self().getAnyChild());
             } else {
                 root = self().getAnyChild();
+                root->parent = nullptr;
             }
         } else if (self().childCount() == 2) {
             T_Node *toReplace = to_ptr(self().right);
