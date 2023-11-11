@@ -299,14 +299,18 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         }
     }
 
-    size_t childCount() {
+    size_t childCount() const {
         return (left != nullptr) + (right != nullptr);
     }
 
-    std::shared_ptr<T_Node> getAnyChild() {
+    const std::shared_ptr<T_Node> &getAnyChild() const {
         if (left)
             return left;
         return right;
+    }
+
+    std::shared_ptr<T_Node> &getAnyChild() {
+        return const_cast<std::shared_ptr<T_Node> &>(detail::as_const(*this).getAnyChild());
     }
 
     std::shared_ptr<T_Node> left = nullptr, right = nullptr;
