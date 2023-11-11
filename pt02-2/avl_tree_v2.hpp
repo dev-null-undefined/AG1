@@ -450,6 +450,9 @@ struct SizeCounter : mixins::SureIAmThat<T_Node, SizeCounter> {
     size_t size = 0;
 };
 
+template<typename T_Node>
+constexpr auto NormalSize = &SizeCounter<T_Node>::size;
+
 template<typename T, T filter>
 struct FilteredSizeCounter {
     template<typename T_Node>
@@ -597,7 +600,7 @@ private:
     }
 
 public:
-    template<auto size_counter>
+    template<auto size_counter = NormalSize<T_Node>>
     size_t getIndex() const {
         const T_Node *current = &self();
         size_t index = _currentIndex<size_counter>(current);
@@ -688,10 +691,8 @@ template<typename T_Node>
 constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
 
 template<typename T_Node>
-constexpr auto NormalSize = &SizeCounter<T_Node>::size;
-
-template<typename T_Node>
 struct Tree {
+    static constexpr auto default_size_counter = NormalSize<T_Node>;
     template<typename T_Tree>
     struct Inner : mixins::SureIAmThat<T_Tree, Inner> {
         using mixins::SureIAmThat<T_Tree, Inner>::self;
@@ -704,12 +705,12 @@ struct Tree {
         using mixins::SureIAmThat<T_Tree, Indexable>::self;
 
     public:
-        template<auto size_counter>
+        template<auto size_counter = default_size_counter>
         const T_Node &find(size_t index) const {
             return self().root->template find<size_counter>(index);
         }
 
-        template<auto size_counter>
+        template<auto size_counter = default_size_counter>
         T_Node &find(size_t index) {
             return self().root->template find<size_counter>(index);
         }
@@ -719,7 +720,7 @@ struct Tree {
     struct InsertAt : mixins::SureIAmThat<T_Tree, InsertAt> {
         using mixins::SureIAmThat<T_Tree, InsertAt>::self;
 
-        template<auto size_counter>
+        template<auto size_counter = default_size_counter>
         T_Node &insert(size_t index, std::shared_ptr<T_Node> node) {
             if (!self().root) {
                 self().root = std::make_shared<T_Node>();
@@ -763,7 +764,7 @@ struct Tree {
     struct Size : mixins::SureIAmThat<T_Tree, Size> {
         using mixins::SureIAmThat<T_Tree, Size>::self;
 
-        template<auto size_counter = &SizeCounter<T_Node>::size>
+        template<auto size_counter = default_size_counter>
         size_t getSize() const {
             if (self().root)
                 return (*to_ptr(self().root)).*size_counter;
@@ -853,4 +854,8 @@ using AVLTree = mixins::Mixins<
         Tree<NodeType>::Rotator,
         Tree<NodeType>::Balancer
 >;
+
+template<typename T_Tree>
+constexpr auto AVLTreeNewLineCounterSize = &NewLineCounter<typename T_Tree::NodeType>::size;
+
 //endregion
