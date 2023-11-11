@@ -284,17 +284,10 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
 
     std::shared_ptr<T_Node> setChild(Direction direction, std::shared_ptr<T_Node> child) {
         if (direction == Direction::left) {
-            left = child;
+            return setChild<Direction::left>(child);
         } else {
-            right = child;
+            return setChild<Direction::right>(child);
         }
-        if (child != nullptr) {
-            child->parent = &self();
-            child->bubbleUp();
-        } else {
-            self().bubbleUp();
-        }
-        return child;
     }
 
     size_t childCount() {
