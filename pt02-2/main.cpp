@@ -24,14 +24,12 @@
 
 #include "avl_tree_v2.hpp"
 
+// MARK: Progtest
+
+
+
 struct TextEditorBackend {
-
     void assertIndex(size_t i, size_t max) const {
-        if (!root && i != 0) {
-            throw std::out_of_range("Index out of range " + std::to_string(i) + " maximum is " +
-                                    std::to_string(0));
-        }
-
         if (i > max) {
             throw std::out_of_range("Index out of range " + std::to_string(i) + " maximum is " +
                                     std::to_string(max - 1));
@@ -86,21 +84,21 @@ struct TextEditorBackend {
 
     void erase(size_t i) {
         assertIndex(i);
-        auto node = root->find<NormalSize<NodeType>>(i);
+        auto &node = root->find<NormalSize<NodeType>>(i);
         node.remove(root);
     }
 
     size_t line_start(size_t r) const {
-        assertIndex(r, lines());
+        assertIndex(r, lines() - 1);
         if (r == 0) {
             return 0;
         }
-        auto node = root->find<NewLineCounterSize<NodeType>>(r - 1);
+        auto &node = root->find<NewLineCounterSize<NodeType>>(r - 1);
         return node.getIndex<NormalSize<NodeType>>();
     }
 
     size_t line_length(size_t r) const {
-        assertIndex(r, lines());
+        assertIndex(r, lines() - 1);
         if (r + 1 == lines()) {
             return size() - line_start(r);
         }
@@ -112,7 +110,7 @@ struct TextEditorBackend {
         if (i == 0) {
             return 0;
         }
-        auto node = root->find<NormalSize<NodeType>>(i);
+        auto &node = root->find<NormalSize<NodeType>>(i);
         return node.getIndex<NewLineCounterSize<NodeType>>() - (node.getValue() == '\n');
     }
 
@@ -120,7 +118,10 @@ struct TextEditorBackend {
 };
 
 #ifndef __PROGTEST__
+// MARK: "Dark magic"
 
+
+// region Dark magic
 ////////////////// Dark magic, ignore ////////////////////////
 
 template<typename T>
@@ -141,7 +142,8 @@ std::string quote(const std::string &s) {
     if (_a != _b) { \
       std::cout << "Line " << __LINE__ << ": Assertion " \
         << a_str << " == " << b_str << " failed!" \
-        << " (lhs: " << quote(_a) << ")" << std::endl; \
+        << " (lhs: " << quote(_a) << ")"\
+        << " (rhs: " << quote(_b) << ")" << std::endl; \
       fail++; \
     } else ok++; \
   } while (0)
@@ -168,16 +170,56 @@ std::string quote(const std::string &s) {
     } \
   } while (0)
 
+
+#define CHECK_EX_C(expr, ex, context) do { \
+    try { \
+      (expr); \
+      fail++; \
+      std::cout << "Line " << __LINE__ << ": Expected " STR(expr) \
+        " to throw " #ex " but no exception was raised." << std::endl; \
+    } catch (const ex&) { ok++; \
+    } catch (...) { \
+      fail++;           \
+      std::cout << "Line " << __LINE__ << ": Expected " << STR(expr) << (context) << \
+        " to throw " #ex " but got different exception." << std::endl; \
+    } \
+  } while (0)
+
 ////////////////// End of dark magic ////////////////////////
+//endregion
 
+NodeType *root = nullptr;
 
-std::string text(const TextEditorBackend &t) {
+struct X {
+    X operator++(int) {
+        root->generateGraph("fail");
+        auto cpy = X(*this);
+        value++;
+        return cpy;
+    }
+
+    operator int() {
+        return value;
+    }
+
+    int value = 0;
+};
+
+namespace reference {
+
+#include "reference.cpp"
+
+}
+
+#include <functional>
+
+std::string text(const auto &t) {
     std::string ret;
     for (size_t i = 0; i < t.size(); i++) ret.push_back(t.at(i));
     return ret;
 }
 
-void test1(int &ok, int &fail) {
+void test1(int &ok, X &fail) {
     TextEditorBackend s("123\n456\n789");
     CHECK(s.size(), 11);
     CHECK(text(s), "123\n456\n789");
@@ -187,7 +229,7 @@ void test1(int &ok, int &fail) {
     CHECK_ALL(s.line_length, 4, 4, 3);
 }
 
-void test2(int &ok, int &fail) {
+void test2(int &ok, X &fail) {
     TextEditorBackend t("123\n456\n789\n");
     CHECK(t.size(), 12);
     CHECK(text(t), "123\n456\n789\n");
@@ -197,7 +239,7 @@ void test2(int &ok, int &fail) {
     CHECK_ALL(t.line_length, 4, 4, 4, 0);
 }
 
-void test3(int &ok, int &fail) {
+void test3(int &ok, X &fail) {
     TextEditorBackend t("asdfasdfasdf");
 
     CHECK(t.size(), 12);
@@ -264,7 +306,7 @@ void test3(int &ok, int &fail) {
     CHECK_ALL(t.line_start, 0, 1);
 }
 
-void test_ex(int &ok, int &fail) {
+void test_ex(int &ok, X &fail) {
     TextEditorBackend t("123\n456\n789\n");
     CHECK_EX(t.at(12), std::out_of_range);
 
@@ -278,21 +320,195 @@ void test_ex(int &ok, int &fail) {
     CHECK_EX(t.line_length(6), std::out_of_range);
     CHECK_EX(t.char_to_line(12), std::out_of_range);
     CHECK_EX(t.char_to_line(25), std::out_of_range);
+
+
+    TextEditorBackend t3("");
+    CHECK_EX(t3.line_start(1), std::out_of_range);
+    CHECK_EX(t3.line_length(1), std::out_of_range);
 }
 
-int main() {
-    try {
-        int ok = 0, fail = 0;
-        if (!fail) test1(ok, fail);
-        if (!fail) test2(ok, fail);
-        if (!fail) test3(ok, fail);
-        if (!fail) test_ex(ok, fail);
+int RNG() {
+    return rand();
+}
 
-        if (!fail) std::cout << "Passed all " << ok << " tests!" << std::endl;
-        else std::cout << "Failed " << fail << " of " << (ok + fail) << " tests." << std::endl;
-    } catch (...) {
-        std::cout << "Unexpected exception thrown." << std::endl;
+// region TEST_ALL makro
+#define TEST_ALL()\
+CHECK(text(sol), text(ref));\
+CHECK(sol.size(), ref.size());\
+CHECK(sol.lines(), ref.lines());\
+CHECK_EX(sol.at(sol.size()), std::out_of_range);\
+CHECK_EX(sol.at(sol.size() + 1), std::out_of_range);\
+\
+for(size_t i = 0; i < ref.lines() + 10; i ++) {\
+try {\
+auto line_length_ref = ref.line_length(i);\
+try {\
+auto line_length = sol.line_length(i);\
+CHECK(line_length, line_length_ref);            \
+if(line_length != line_length_ref)     std::cout << "Index: " << i << " failed line length" << std::endl;              \
+} catch (const std::out_of_range &e) {\
+fail++;\
+std::cout << "Line " << __LINE__ << ": Throwed after line_lenght (" << i << ") but should not throw." << std::endl;\
+}\
+} catch (const std::out_of_range &e) {\
+CHECK_EX(sol.line_length(i), std::out_of_range);\
+return;\
+}\
+try {\
+auto line_start_ref = ref.line_start(i);\
+try {\
+auto line_start = sol.line_start(i);\
+CHECK(line_start, line_start_ref);\
+} catch (const std::out_of_range &e) {\
+fail++;\
+std::cout << "Line " << __LINE__ << ": Throwed after line_start (" << i << ") but should not throw." << std::endl;\
+}\
+} catch (const std::out_of_range &e) {\
+CHECK_EX(sol.line_start(i), std::out_of_range);\
+return;\
+}\
+}\
+\
+for(size_t i = 0; i < ref.size() + 10; i ++) {\
+try {\
+auto char_to_line_ref = ref.char_to_line(i);\
+try {\
+auto char_to_line = sol.char_to_line(i);\
+CHECK(char_to_line_ref, char_to_line);\
+} catch (const std::out_of_range &e) {\
+fail++;\
+std::cout << "Line " << __LINE__ << ": Throwed after char_to_line (" << i << ") but should not throw." << std::endl;\
+}\
+} catch (const std::out_of_range &e) {\
+CHECK_EX(sol.char_to_line(i), std::out_of_range);\
+return;\
+}\
+try {\
+auto at_ref = ref.at(i);\
+try {\
+auto at = sol.at(i);\
+CHECK(at_ref, at);\
+} catch (const std::out_of_range &e) {\
+fail++;\
+std::cout << "Line " << __LINE__ << ": Throwed after at (" << i << ") but should not throw." << std::endl;\
+}\
+} catch (const std::out_of_range &e) {\
+CHECK_EX(sol.at(i), std::out_of_range);\
+return;\
+}\
+}                 \
+
+// endregion
+
+void insert(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
+    int pos = RNG() % (sol.size() + 20);
+    char c = RNG() % 10 == 0 ? '\n' : ('a' + (RNG() % 26));
+    try {
+        ref.insert(pos, c);
+        try {
+            sol.insert(pos, c);
+        } catch (const std::out_of_range &e) {
+            fail++;
+            std::cout << "Line " << __LINE__ << ": Throwed after insert (" << pos << ", " << quote(c)
+                      << ") but should not throw." << std::endl;
+        }
+    } catch (const std::out_of_range &e) {
+        CHECK_EX_C(sol.insert(pos, c), std::out_of_range, " (" + std::to_string(pos) + ", " + quote(c) + ")");
+        return;
     }
+    std::string s = text(sol);
+    std::replace(s.begin(), s.end(), '\n', '*');
+    std::cout << s << std::endl;
+    TEST_ALL()
+}
+
+
+std::vector<std::function<void(int &, X &, TextEditorBackend &,
+                               reference::TextEditorBackend &)>> referenceOperation = {
+        insert
+};
+
+void test_vs_ref(int &ok, X &fail) {
+    for (int i = 0; i < 20; ++i) {
+        std::string s = "";
+        for (int j = 0; j < RNG() % 3; ++j) {
+            if (RNG() % 3 == 0)
+                s.push_back('\n');
+            else
+                s.push_back('a' + (RNG() % 26));
+        }
+
+        TextEditorBackend t(s);
+        reference::TextEditorBackend t2(s);
+
+        for (int j = 0; j < 10; ++j) {
+            referenceOperation[RNG() % referenceOperation.size()](ok, fail, t, t2);
+        }
+    }
+}
+
+void test4(int &ok, X &fail) {
+    TextEditorBackend t("");
+    CHECK(text(t), "");
+    CHECK(t.size(), 0);
+    CHECK(t.lines(), 1);
+    CHECK_ALL(t.line_start, 0);
+    CHECK_ALL(t.line_length, 0);
+
+    t.insert(0, '\n');
+    root = t.root.get();
+    CHECK(text(t), "\n");
+    CHECK(t.size(), 1);
+    CHECK(t.lines(), 2);
+    CHECK_ALL(t.line_start, 0, 1);
+    CHECK_ALL(t.line_length, 1, 0);
+    CHECK_ALL(t.char_to_line, 0);
+
+    t.insert(0, '\n');
+    t.insert(1, '\n');
+    t.insert(1, '\n');
+    CHECK(text(t), "\n\n\n\n");
+    CHECK(t.size(), 4);
+    CHECK(t.lines(), 5);
+    CHECK_ALL(t.line_start, 0, 1, 2, 3, 4);
+    CHECK_ALL(t.line_length, 1, 1, 1, 1, 0);
+    CHECK_ALL(t.char_to_line, 0, 1, 2, 3);
+
+    t.erase(0);
+    t.erase(1);
+    t.erase(1);
+    t.erase(0);
+    CHECK(text(t), "");
+    CHECK(t.size(), 0);
+    CHECK(t.lines(), 1);
+    CHECK_ALL(t.line_start, 0);
+    CHECK_ALL(t.line_length, 0);
+
+    t.insert(0, '\n');
+    CHECK(text(t), "\n");
+    CHECK(t.size(), 1);
+    CHECK(t.lines(), 2);
+    CHECK_ALL(t.line_start, 0, 1);
+    CHECK_ALL(t.line_length, 1, 0);
+    CHECK_ALL(t.char_to_line, 0);
+}
+
+std::vector<std::function<void(int &, X &)>> tests = {
+//        test1,
+//        test2,
+//        test3,
+        test4,
+        test_ex,
+        test_vs_ref
+};
+
+int main() {
+    int ok = 0;
+    X fail;
+    for (auto &test: tests) test(ok, fail);
+
+    if (!fail) std::cout << "Passed all " << ok << " tests!" << std::endl;
+    else std::cout << "Failed " << fail << " of " << (ok + fail) << " tests." << std::endl;
 }
 
 #endif
