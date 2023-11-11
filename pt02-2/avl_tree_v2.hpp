@@ -49,6 +49,11 @@ namespace detail {
     concept Printable = requires(T t) {
         { std::cout << t } -> std::same_as<std::ostream &>;
     };
+
+    template<class T>
+    constexpr std::add_const_t<T> &as_const(T &t) noexcept {
+        return t;
+    }
 }
 
 template<typename T>
@@ -524,18 +529,7 @@ private:
 
     template<auto size_counter>
     T_Node &_find(size_t index) {
-        T_Node *current = &self();
-        while (true) {
-            if (index == _currentIndex<size_counter>(current) && _isCurrent<size_counter>(current))
-                return *current;
-
-            if (index < _currentIndex<size_counter>(current)) {
-                current = to_ptr(current->left);
-            } else if (index >= _currentIndex<size_counter>(current)) {
-                index -= _currentIndex<size_counter>(current);
-                current = to_ptr(current->right);
-            }
-        }
+        return const_cast<T_Node &>(detail::as_const(*this).template _find<size_counter>(index));
     }
 
     template<auto size_counter>
@@ -568,10 +562,7 @@ public:
 
     template<auto size_counter>
     T_Node &find(size_t index) {
-        if (index >= self().*size_counter)
-            throw std::out_of_range("Index out of range " + std::to_string(index) + " maximum is " +
-                                    std::to_string(self().*size_counter));
-        return _find<size_counter>(index + 1);
+        return const_cast<T_Node &>(detail::as_const(*this).template find<size_counter>(index));
     }
 };
 
