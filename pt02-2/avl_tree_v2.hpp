@@ -403,7 +403,7 @@ struct ValueNode {
 
     public:
         auto mixinInfo() {
-            return _value == '\n' ? "\\n" : std::string(1, _value);
+            return _value == '\n' ? "/n" : (!isalnum(_value) ? "\\" + std::to_string(_value) : std::string(1, _value));
         }
 
         const T &getValue() const {
