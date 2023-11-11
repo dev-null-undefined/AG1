@@ -539,10 +539,10 @@ private:
             if (index == _currentIndex<size_counter>(current)) {
                 if (_isCurrent<size_counter>(current))
                     return *current;
-                if (index == _currentIndex<size_counter>(to_ptr(current->left))) {
+                if (index == _size<size_counter>(to_ptr(current->left))) {
                     current = to_ptr(current->left);
                     continue;
-                } else {
+                } else if (index == _size<size_counter>(to_ptr(current->left))) {
                     current = to_ptr(current->right);
                     continue;
                 }
@@ -560,6 +560,12 @@ private:
     template<auto size_counter>
     T_Node &_find(size_t index) {
         return const_cast<T_Node &>(detail::as_const(*this).template _find<size_counter>(index));
+    }
+
+    template<auto size_counter>
+    size_t _size(const T_Node *current) const {
+        if (!current) return 0;
+        return current->*size_counter;
     }
 
     template<auto size_counter>
