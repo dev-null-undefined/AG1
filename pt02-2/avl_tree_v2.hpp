@@ -28,27 +28,7 @@ namespace detail {
     constexpr bool next_type_v = next_type<T...>::value;
 
     template<typename T>
-    struct is_shared_ptr : std::false_type {
-    };
-
-    template<typename T>
-    struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {
-    };
-
-    template<typename T>
-    constexpr bool is_shared_ptr_v = is_shared_ptr<T>::value;
-
-    template<typename T>
-    concept SharedPtr = is_shared_ptr_v<T>;
-
-    template<typename T>
     concept NumericType = std::integral<T> || std::floating_point<T>;
-
-
-    template<typename T>
-    concept Printable = requires(T t) {
-        { std::cout << t } -> std::same_as<std::ostream &>;
-    };
 
     template<class T>
     constexpr std::add_const_t<T> &as_const(T &t) noexcept {
@@ -178,23 +158,13 @@ ExecAll(updateAll, update)
 ExecAll(mixinInfoAll, mixinInfo)
 ExecAll(copyAll, copy)
 
-template<typename T>
-requires (detail::SharedPtr<std::remove_reference_t<T>>)
-decltype(auto) to_ptr(T something) {
-    return something.get();
-}
-
-template<typename T>
-decltype(auto) to_ptr(T *something) {
-    return something;
-}
 
 enum class Direction {
     left, right
 };
 
 template<typename T_Node>
-struct SharedThis : mixins::SureIAmThat<T_Node, SharedThis>, std::enable_shared_from_this<T_Node> {
+struct sharedThis : mixins::SureIAmThat<T_Node, sharedThis>, std::enable_shared_from_this<T_Node> {
 };
 
 template<typename T_Node>
@@ -210,10 +180,10 @@ struct BubbleUp : mixins::SureIAmThat<T_Node, BubbleUp> {
 
     void bubbleUp() {
         static_assert(mixins::Mixin<T_Node, ParentNode>, "ParentNode mixin is required");
-        T_Node *current = to_ptr(&self());
+        T_Node *current = &self();
         while (current) {
-            updateAll(*to_ptr(current));
-            current = to_ptr(current->parent);
+            updateAll(*current);
+            current = current->parent;
         }
     }
 };
@@ -222,8 +192,29 @@ template<typename T_Node>
 struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
     using mixins::SureIAmThat<T_Node, BinaryNode>::self;
 
+private:
+
+    static void _removeChild(T_Node *node) {
+        if (!node) return;
+        node->left = node->right = nullptr;
+        delete node;
+    }
+
+public:
+
+    BinaryNode() = default;
+
+    ~BinaryNode() {
+        delete left;
+        delete right;
+    }
+
+    BinaryNode(const BinaryNode &) = delete;
+
+    BinaryNode &operator=(const BinaryNode &) = delete;
+
     template<Direction direction>
-    decltype(auto) getChild() {
+    T_Node *&getChild() {
         static_assert(direction == Direction::left || direction == Direction::right, "Invalid direction");
         if constexpr (direction == Direction::left) {
             return left;
@@ -232,7 +223,7 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         }
     }
 
-    decltype(auto) getChild(Direction direction) {
+    T_Node *&getChild(Direction direction) {
         if (direction == Direction::left) {
             return left;
         } else {
@@ -250,10 +241,12 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
 
     template<Direction direction>
     requires mixins::Mixin<T_Node, BubbleUp>
-    std::shared_ptr<T_Node> setChild(std::shared_ptr<T_Node> child) {
+    T_Node *setChild(T_Node *child) {
         if constexpr (direction == Direction::left) {
+            _removeChild(left);
             left = child;
         } else {
+            _removeChild(right);
             right = child;
         }
         if (child != nullptr) {
@@ -265,11 +258,11 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         return child;
     }
 
-    std::shared_ptr<T_Node> setChild(Direction direction, std::shared_ptr<T_Node> child) {
+    T_Node *setChild(Direction direction, T_Node *child) {
         if (direction == Direction::left) {
-            return setChild<Direction::left>(child);
+            return setChild<Direction::left>(std::move(child));
         } else {
-            return setChild<Direction::right>(child);
+            return setChild<Direction::right>(std::move(child));
         }
     }
 
@@ -277,17 +270,17 @@ struct BinaryNode : mixins::SureIAmThat<T_Node, BinaryNode> {
         return (left != nullptr) + (right != nullptr);
     }
 
-    const std::shared_ptr<T_Node> &getAnyChild() const {
+    const T_Node *const &getAnyChild() const {
         if (left)
             return left;
         return right;
     }
 
-    std::shared_ptr<T_Node> &getAnyChild() {
-        return const_cast<std::shared_ptr<T_Node> &>(detail::as_const(*this).getAnyChild());
+    T_Node *&getAnyChild() {
+        return const_cast<T_Node *&>(detail::as_const(*this).getAnyChild());
     }
 
-    std::shared_ptr<T_Node> left = nullptr, right = nullptr;
+    T_Node *left = nullptr, *right = nullptr;
 };
 
 template<typename T_Node>
@@ -295,7 +288,7 @@ struct Equals : mixins::SureIAmThat<T_Node, Equals> {
     using mixins::SureIAmThat<T_Node, Equals>::self;
 
     bool equals(const T_Node *other) const {
-        if constexpr (requires { requires mixins::Mixin<T_Node, SharedThis>; }) {
+        if constexpr (requires { requires mixins::Mixin<T_Node, sharedThis>; }) {
             return other->shared_from_this() == self().shared_from_this();
         }
         return other == this;
@@ -305,10 +298,10 @@ struct Equals : mixins::SureIAmThat<T_Node, Equals> {
 template<mixins::Mixin<BinaryNode, ParentNode> T_Node>
 Direction getChildDirection(const T_Node *child) {
     if constexpr (requires { requires mixins::Mixin<T_Node, Equals>; }) {
-        if (child->parent->left && to_ptr(child->parent->left)->equals(child))
+        if (child->parent->left && child->parent->left->equals(child))
             return Direction::left;
     } else {
-        if (to_ptr(child->parent->left) == (child))
+        if (child->parent->left == (child))
             return Direction::left;
     }
     return Direction::right;
@@ -520,20 +513,20 @@ private:
             if (index == _currentIndex<size_counter>(current)) {
                 if (_isCurrent<size_counter>(current))
                     return *current;
-                if (index == _size<size_counter>(to_ptr(current->left))) {
-                    current = to_ptr(current->left);
+                if (index == _size<size_counter>(current->left)) {
+                    current = current->left;
                     continue;
-                } else if (index == _size<size_counter>(to_ptr(current->left))) {
-                    current = to_ptr(current->right);
+                } else if (index == _size<size_counter>(current->left)) {
+                    current = current->right;
                     continue;
                 }
             }
 
             if (index < _currentIndex<size_counter>(current)) {
-                current = to_ptr(current->left);
+                current = current->left;
             } else /* if (index > _currentIndex<size_counter>(current)) */ {
                 index -= _currentIndex<size_counter>(current);
-                current = to_ptr(current->right);
+                current = current->right;
             }
         }
     }
@@ -554,7 +547,7 @@ private:
         if (!current) return 0;
         size_t index = current->*size_counter;
         if (current->right)
-            index -= to_ptr(current->right)->*size_counter;
+            index -= (*current->right).*size_counter;
         return index;
     }
 
@@ -562,9 +555,9 @@ private:
     bool _isCurrent(const T_Node *current) const {
         size_t subCount = 0;
         if (current->right)
-            subCount += to_ptr(current->right)->*size_counter;
+            subCount += (*current->right).*size_counter;
         if (current->left)
-            subCount += to_ptr(current->left)->*size_counter;
+            subCount += (*current->left).*size_counter;
         return subCount != current->*size_counter;
     }
 
@@ -595,7 +588,7 @@ private:
     size_t _currentIndex(const T_Node *current) const {
         size_t index = current->*size_counter;
         if (current->right)
-            index -= to_ptr(current->right)->*size_counter;
+            index -= (*current->right).*size_counter;
         return index;
     }
 
@@ -619,17 +612,17 @@ template<typename T_Node>
 struct Insert : mixins::SureIAmThat<T_Node, Insert> {
     using mixins::SureIAmThat<T_Node, Insert>::self;
 
-    T_Node &insert(std::shared_ptr<T_Node> node) {
+    T_Node &insert(const T_Node &node) {
         Direction direction = Direction::right;
-        T_Node *toInsert = to_ptr(&self());
+        T_Node *toInsert = &self();
         while (toInsert->getChild(direction)) {
-            toInsert = to_ptr(toInsert->getChild(direction));
+            toInsert = toInsert->getChild(direction);
             direction = Direction::left;
         }
-        auto aux = std::make_shared<T_Node>();
+        auto aux = new T_Node();
         copyAll(*aux, self());
-        toInsert->setChild(direction, aux);
-        copyAll(self(), *node);
+        toInsert->setChild(direction, std::move(aux));
+        copyAll(self(), node);
         return self();
     }
 };
@@ -639,15 +632,15 @@ template<typename T_Node>
 struct PushBack : mixins::SureIAmThat<T_Node, PushBack> {
     using mixins::SureIAmThat<T_Node, PushBack>::self;
 
-    T_Node &pushBack(std::shared_ptr<T_Node> node) {
-        T_Node *toInsert = to_ptr(&self());
+    T_Node &pushBack(const T_Node &node) {
+        T_Node *toInsert = &self();
         while (toInsert->template getChild<Direction::right>()) {
-            toInsert = to_ptr(toInsert->template getChild<Direction::right>());
+            toInsert = toInsert->template getChild<Direction::right>();
         }
-        auto aux = std::make_shared<T_Node>();
-        copyAll(*aux, *node);
-        toInsert->template setChild<Direction::right>(aux);
-        return *aux;
+        auto aux = new T_Node();
+        copyAll(*aux, node);
+        toInsert->template setChild<Direction::right>(std::move(aux));
+        return *toInsert->right;
     }
 };
 
@@ -656,11 +649,11 @@ struct InsertAt : mixins::SureIAmThat<T_Node, InsertAt>, PushBack<T_Node>, Inser
     using mixins::SureIAmThat<T_Node, InsertAt>::self;
 
     template<auto size_counter>
-    T_Node &insert(size_t index, std::shared_ptr<T_Node> node) {
+    T_Node &insert(size_t index, const T_Node &node) {
         if (index == self().*size_counter)
-            return self().pushBack(node);
+            return self().pushBack(std::move(node));
         auto &toInsert = self().template find<size_counter>(index);
-        return toInsert.Insert<T_Node>::insert(node);
+        return toInsert.Insert<T_Node>::insert(std::move(node));
     }
 };
 
@@ -682,8 +675,6 @@ using NodeType = mixins::Mixins<
         NewLineCounter,
         SizeCounter,
         Indexable,
-        SharedThis,
-//        Rotator,
         InsertAt,
         Equals>;
 
@@ -697,7 +688,17 @@ struct Tree {
     struct Inner : mixins::SureIAmThat<T_Tree, Inner> {
         using mixins::SureIAmThat<T_Tree, Inner>::self;
         using NodeType = T_Node;
-        std::shared_ptr<T_Node> root = nullptr;
+        T_Node *root = nullptr;
+
+        Inner() = default;
+
+        ~Inner() {
+            delete root;
+        }
+
+        Inner(const Inner &) = delete;
+
+        Inner &operator=(const Inner &) = delete;
     };
 
 
@@ -705,26 +706,26 @@ struct Tree {
     struct Rotator : mixins::SureIAmThat<T_Tree, Rotator> {
         using mixins::SureIAmThat<T_Tree, Rotator>::self;
 
-        void rotate(Direction direction, T_Node &node) {
+        void rotate(Direction direction, T_Node *&node) {
             Direction revDirection = direction == Direction::left ? Direction::right : Direction::left;
-            auto pivot = node.shared_from_this();
-            auto parent = node.parent;
-            auto child = node.getChild(revDirection);
+            auto pivot = node;
+            auto parent = node->parent;
+            auto child = node->getChild(revDirection);
             auto grandChild = child->getChild(direction);
 
             if (parent) {
-                Direction parentDir = getChildDirection(to_ptr(pivot));
+                Direction parentDir = getChildDirection(pivot);
                 (*parent).*(BinaryNode<T_Node>::directionToMember(parentDir)) = child;
             } else {
                 self().root = child;
             }
             child->parent = parent;
 
-            pivot->parent = to_ptr(child);
+            pivot->parent = child;
 
             (*pivot).*(BinaryNode<T_Node>::directionToMember(revDirection)) = grandChild;
             if (grandChild)
-                grandChild->parent = to_ptr(pivot);
+                grandChild->parent = pivot;
 
             (*child).*(BinaryNode<T_Node>::directionToMember(direction)) = pivot;
 
@@ -734,16 +735,16 @@ struct Tree {
                 updateAll(*parent);
         }
 
-        void rotateLeft(T_Node &node) {
+        void rotateLeft(T_Node *&node) {
             rotate(Direction::left, node);
         }
 
-        void rotateRight(T_Node &node) {
+        void rotateRight(T_Node *&node) {
             rotate(Direction::right, node);
         }
 
         template<Direction direction>
-        void rotate(T_Node &node) {
+        void rotate(T_Node *&node) {
             if (direction == Direction::left) {
                 rotateLeft(node);
             } else {
@@ -756,18 +757,18 @@ struct Tree {
     struct Balancer : mixins::SureIAmThat<T_Tree, Balancer> {
         using mixins::SureIAmThat<T_Tree, Balancer>::self;
 
-        void balance(T_Node &node) {
-            updateAll(node);
-            int delta = node.getDelta();
+        void balance(T_Node *&node) {
+            updateAll(*node);
+            int delta = node->getDelta();
             if (std::abs(delta) > 1) {
                 if (delta > 0) {
-                    if (node.left->getSign() < 0) {
-                        self().rotateLeft(*node.left);
+                    if (node->left->getSign() < 0) {
+                        self().rotateLeft(node->left);
                     }
                     self().rotateRight(node);
                 } else {
-                    if (node.right->getSign() > 0) {
-                        self().rotateRight(*node.right);
+                    if (node->right->getSign() > 0) {
+                        self().rotateRight(node->right);
                     }
                     self().rotateLeft(node);
                 }
@@ -776,7 +777,7 @@ struct Tree {
 
         void balanceUp(T_Node *node) {
             while (node) {
-                balance(*node);
+                balance(node);
                 node = node->parent;
             }
         }
@@ -803,13 +804,13 @@ struct Tree {
         using mixins::SureIAmThat<T_Tree, InsertAt>::self;
 
         template<auto size_counter = default_size_counter>
-        T_Node &insert(size_t index, std::shared_ptr<T_Node> node) {
+        T_Node &insert(size_t index, const T_Node &node) {
             if (!self().root) {
-                self().root = std::make_shared<T_Node>();
-                copyAll(*self().root, *node);
+                self().root = new T_Node();
+                copyAll(*self().root, node);
                 return *self().root;
             }
-            T_Node &inserted = self().root->template insert<size_counter>(index, node);
+            T_Node &inserted = self().root->template insert<size_counter>(index, std::move(node));
             if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
                 self().balanceUp(&inserted);
             }
@@ -827,19 +828,23 @@ struct Tree {
                 if (node.parent) {
                     node.parent->setChild(getChildDirection(&node), nullptr);
                 } else {
+                    delete self().root;
                     self().root = nullptr;
                 }
             } else if (node.childCount() == 1) {
                 if (node.parent) {
-                    node.parent->setChild(getChildDirection(&node), node.getAnyChild());
+                    node.parent->setChild(getChildDirection(&node), std::move(node.getAnyChild()));
                 } else {
-                    self().root = node.getAnyChild();
+                    auto save = self().root;
+                    self().root = std::move(node.getAnyChild());
                     self().root->parent = nullptr;
+                    save->left = save->right = nullptr;
+                    delete save;
                 }
             } else if (node.childCount() == 2) {
-                T_Node *toReplace = to_ptr(node.right);
+                T_Node *toReplace = node.right;
                 while (toReplace->left)
-                    toReplace = to_ptr(toReplace->left);
+                    toReplace = toReplace->left;
                 copyAll(node, *toReplace);
                 remove(*toReplace);
                 return;
@@ -861,7 +866,7 @@ struct Tree {
         template<auto size_counter = default_size_counter>
         [[nodiscard]] size_t getSize() const {
             if (self().root)
-                return (*to_ptr(self().root)).*size_counter;
+                return (*self().root).*size_counter;
             return 0;
         }
     };
