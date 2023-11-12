@@ -26,6 +26,8 @@
 
 // MARK: Progtest
 
+using tree_t = AugmentedAVLTree<>;
+using NodeType = tree_t::NodeType;
 
 struct TextEditorBackend {
     void assertIndex(size_t i, size_t max) const {
@@ -61,12 +63,12 @@ struct TextEditorBackend {
     }
 
     size_t lines() const {
-        return tree.getSize<AVLTreeNewLineCounterSize<AVLTree>>() + 1;
+        return tree.getSize<AVLTreeNewLineCounterSize<tree_t>>() + 1;
     }
 
     char at(size_t i) const {
         assertStrictIndex(i);
-        auto node = tree.find(i);
+        auto &node = tree.find(i);
         return node.getValue();
     }
 
@@ -78,7 +80,7 @@ struct TextEditorBackend {
 
     void insert(size_t i, char c) {
         assertIndex(i);
-        tree.insert(i, std::make_shared<AVLTree::NodeType>()).setValue(c);
+        tree.insert(i, NodeType()).setValue(c);
     }
 
     void erase(size_t i) {
@@ -92,7 +94,7 @@ struct TextEditorBackend {
         if (r == 0) {
             return 0;
         }
-        auto &node = tree.find<AVLTreeNewLineCounterSize<AVLTree>>(r - 1);
+        auto &node = tree.find<AVLTreeNewLineCounterSize<tree_t>>(r - 1);
         return node.getIndex();
     }
 
@@ -110,8 +112,8 @@ struct TextEditorBackend {
             return 0;
         }
         auto &node = tree.find(i);
-        return node.getIndex<AVLTreeNewLineCounterSize<AVLTree>>() - (node.getValue() == '\n');
+        return node.getIndex<AVLTreeNewLineCounterSize<tree_t>>() - (node.getValue() == '\n');
     }
 
-    AVLTree tree;
+    tree_t tree;
 };

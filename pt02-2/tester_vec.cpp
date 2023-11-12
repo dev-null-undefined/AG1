@@ -22,7 +22,7 @@
 
 #endif
 
-#define __PROGTEST__
+//#define __PROGTEST__
 
 #include "main.cpp"
 
@@ -202,7 +202,7 @@ namespace reference {
         }
 
         size_t char_to_line(size_t i) const {
-            assertIndex(i);
+            assertStrictIndex(i);
             size_t r = 0;
             for (size_t j = 0; j < i; ++j) {
                 if (s[j] == '\n') {
@@ -437,7 +437,7 @@ return;\
 void print(const TextEditorBackend &t) {
     std::string s = text(t);
     std::replace(s.begin(), s.end(), '\n', '*');
-    std::cout << s << std::endl;
+//    std::cout << s << std::endl;
 }
 
 void insert(int &ok, X &fail, TextEditorBackend &sol, reference::TextEditorBackend &ref) {
@@ -487,11 +487,56 @@ void test_vs_ref(int &ok, X &fail) {
     }
 }
 
+void test4(int &ok, X &fail) {
+    TextEditorBackend t("");
+    CHECK(text(t), "");
+    CHECK(t.size(), 0);
+    CHECK(t.lines(), 1);
+    CHECK_ALL(t.line_start, 0);
+    CHECK_ALL(t.line_length, 0);
+
+    t.insert(0, '\n');
+    CHECK(text(t), "\n");
+    CHECK(t.size(), 1);
+    CHECK(t.lines(), 2);
+    CHECK_ALL(t.line_start, 0, 1);
+    CHECK_ALL(t.line_length, 1, 0);
+    CHECK_ALL(t.char_to_line, 0);
+
+    t.insert(0, '\n');
+    t.insert(1, '\n');
+    t.insert(1, '\n');
+    CHECK(text(t), "\n\n\n\n");
+    CHECK(t.size(), 4);
+    CHECK(t.lines(), 5);
+    CHECK_ALL(t.line_start, 0, 1, 2, 3, 4);
+    CHECK_ALL(t.line_length, 1, 1, 1, 1, 0);
+    CHECK_ALL(t.char_to_line, 0, 1, 2, 3);
+
+    t.erase(0);
+    t.erase(1);
+    t.erase(1);
+    t.erase(0);
+    CHECK(text(t), "");
+    CHECK(t.size(), 0);
+    CHECK(t.lines(), 1);
+    CHECK_ALL(t.line_start, 0);
+    CHECK_ALL(t.line_length, 0);
+
+    t.insert(0, '\n');
+    CHECK(text(t), "\n");
+    CHECK(t.size(), 1);
+    CHECK(t.lines(), 2);
+    CHECK_ALL(t.line_start, 0, 1);
+    CHECK_ALL(t.line_length, 1, 0);
+    CHECK_ALL(t.char_to_line, 0);
+}
 
 std::vector<std::function<void(int &, X &)>> tests = {
         test1,
         test2,
         test3,
+        test4,
         test_ex,
         test_vs_ref
 };

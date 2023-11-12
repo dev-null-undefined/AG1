@@ -16,8 +16,14 @@ add_executable(ag1_progtest_01_1 pt01/main.cpp)
 project(ag1_avl_tree)
 add_executable(ag1_avl_tree pt02/avl_tree_tester.cpp)
 
+project(ag1_progtest_02_1)
+add_executable(ag1_progtest_02_1 pt02/sample.cpp)
+
 project(ag1_progtest_02_2)
 add_executable(ag1_progtest_02_2 pt02-2/main.cpp)
+
+project(ag1_progtest_02_2_mini)
+add_executable(ag1_progtest_02_2_mini pt02-2/avl_mini_prog.cpp)
 
 project(ag1_progtest_02_2_testing)
 add_executable(ag1_progtest_02_2_testing pt02-2/testing.cpp)

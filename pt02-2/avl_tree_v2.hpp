@@ -421,6 +421,21 @@ struct ValueNode {
     };
 };
 
+
+template<typename T>
+struct Comparable {
+    template<typename T_Node>
+    struct Inner : mixins::SureIAmThat<T_Node, Inner> {
+        using mixins::SureIAmThat<T_Node, Inner>::self;
+    public:
+
+        auto operator<=>(const T_Node &other) const {
+            static_assert(mixins::Mixin<T_Node, ValueNode<T>::template Inner>, "ValueNode mixin is required");
+            return self().getValue() <=> other.getValue();
+        }
+    };
+};
+
 template<typename T_Node>
 struct SizeCounter : mixins::SureIAmThat<T_Node, SizeCounter> {
     using mixins::SureIAmThat<T_Node, SizeCounter>::self;
@@ -659,30 +674,7 @@ struct InsertAt : mixins::SureIAmThat<T_Node, InsertAt>, PushBack<T_Node>, Inser
 
 
 template<typename T_Node>
-using NewLineCounter = FilteredSizeCounter<char, '\n'>::Inner<T_Node>;
-
-template<typename T_Node>
-using CharValueNode = ValueNode<char>::Inner<T_Node>;
-
-using NodeType = mixins::Mixins<
-        CharValueNode,
-        ParentNode,
-        GetIndex,
-        BubbleUp,
-        BinaryNode,
-        GraphViz,
-        MaxDepth,
-        NewLineCounter,
-        SizeCounter,
-        Indexable,
-        InsertAt,
-        Equals>;
-
-template<typename T_Node>
-constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
-
-template<typename T_Node>
-struct Tree {
+struct TreeMixer {
     static constexpr auto default_size_counter = NormalSize<T_Node>;
     template<typename T_Tree>
     struct Inner : mixins::SureIAmThat<T_Tree, Inner> {
@@ -819,6 +811,93 @@ struct Tree {
     };
 
     template<typename T_Tree>
+    struct InsertSorted : mixins::SureIAmThat<T_Tree, InsertSorted> {
+        using mixins::SureIAmThat<T_Tree, InsertSorted>::self;
+
+    private:
+        T_Node *_insert(const decltype(std::declval<T_Node>().getValue()) &value) {
+            if (!self().root) {
+                self().root = new T_Node();
+                return &self().root->setValue(value);
+            }
+
+            auto *newNode = new T_Node();
+            newNode->setValue(value);
+
+            T_Node *current = self().root;
+            while (true) {
+                if (*current < *newNode) {
+                    if (current->right) {
+                        current = current->right;
+                    } else {
+                        return current->template setChild<Direction::right>(newNode);
+                    }
+                } else if (*newNode < *current) {
+                    if (current->left) {
+                        current = current->left;
+                    } else {
+                        return current->template setChild<Direction::left>(newNode);
+                    }
+                } else {
+                    delete newNode;
+                    return nullptr;
+                }
+            }
+        }
+
+    public:
+        bool insert(const decltype(std::declval<T_Node>().getValue()) &value) {
+            T_Node *inserted = _insert(value);
+            if (inserted) {
+                if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
+                    self().balanceUp(inserted);
+                }
+                return true;
+            }
+            return false;
+        }
+    };
+
+
+    template<typename T_Tree>
+    struct FindSorted : mixins::SureIAmThat<T_Tree, FindSorted> {
+        using mixins::SureIAmThat<T_Tree, FindSorted>::self;
+
+        T_Node *find(const decltype(std::declval<T_Node>().getValue()) &value) {
+            return const_cast<T_Node *>(detail::as_const(*this).find(value));
+        }
+
+        const T_Node *find(const decltype(std::declval<T_Node>().getValue()) &value) const {
+            if (!self().root) {
+                return nullptr;
+            }
+
+            T_Node newNode;
+            newNode.setValue(value);
+
+            const T_Node *current = self().root;
+
+            while (true) {
+                if (*current < newNode) {
+                    if (current->right) {
+                        current = current->right;
+                    } else {
+                        return nullptr;
+                    }
+                } else if (newNode < *current) {
+                    if (current->left) {
+                        current = current->left;
+                    } else {
+                        return nullptr;
+                    }
+                } else {
+                    return current;
+                }
+            }
+        }
+    };
+
+    template<typename T_Tree>
     struct Delete : mixins::SureIAmThat<T_Tree, Delete> {
         using mixins::SureIAmThat<T_Tree, Delete>::self;
 
@@ -873,14 +952,62 @@ struct Tree {
 
 };
 
+
+template<typename T_Node>
+using NewLineCounter = FilteredSizeCounter<char, '\n'>::Inner<T_Node>;
+
+
+template<typename ValueType = char>
+using AugmentedNode = mixins::Mixins<
+        ValueNode<ValueType>::template Inner,
+        ParentNode,
+        GetIndex,
+        BubbleUp,
+        BinaryNode,
+        GraphViz,
+        MaxDepth,
+        NewLineCounter,
+        SizeCounter,
+        Indexable,
+        InsertAt,
+        Equals>;
+
+
+template<typename ValueType = char>
+using AVLNode = mixins::Mixins<
+        ValueNode<ValueType>::template Inner,
+        ParentNode,
+        BubbleUp,
+        BinaryNode,
+        GraphViz,
+        SizeCounter,
+        MaxDepth,
+        Equals,
+        Comparable<ValueType>::template Inner>;
+
+template<typename T_Node>
+constexpr auto NewLineCounterSize = &NewLineCounter<T_Node>::size;
+
+template<typename Value = char>
+using AugmentedAVLTree = mixins::Mixins<
+        TreeMixer<AugmentedNode<Value>>::template Inner,
+        TreeMixer<AugmentedNode<Value>>::template Indexable,
+        TreeMixer<AugmentedNode<Value>>::template InsertAt,
+        TreeMixer<AugmentedNode<Value>>::template Delete,
+        TreeMixer<AugmentedNode<Value>>::template Size,
+        TreeMixer<AugmentedNode<Value>>::template Rotator,
+        TreeMixer<AugmentedNode<Value>>::template Balancer
+>;
+
+template<typename Value = char>
 using AVLTree = mixins::Mixins<
-        Tree<NodeType>::Inner,
-        Tree<NodeType>::Indexable,
-        Tree<NodeType>::InsertAt,
-        Tree<NodeType>::Delete,
-        Tree<NodeType>::Size,
-        Tree<NodeType>::Rotator,
-        Tree<NodeType>::Balancer
+        TreeMixer<AVLNode<Value>>::template Inner,
+        TreeMixer<AVLNode<Value>>::template Delete,
+        TreeMixer<AVLNode<Value>>::template Rotator,
+        TreeMixer<AVLNode<Value>>::template Balancer,
+        TreeMixer<AVLNode<Value>>::template InsertSorted,
+        TreeMixer<AVLNode<Value>>::template FindSorted,
+        TreeMixer<AVLNode<Value>>::template Size
 >;
 
 template<typename T_Tree>
