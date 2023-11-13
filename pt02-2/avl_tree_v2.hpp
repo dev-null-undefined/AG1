@@ -804,13 +804,16 @@ struct TreeMixer {
         using mixins::SureIAmThat<T_Tree, InsertAt>::self;
 
         template<auto size_counter = default_size_counter>
-        T_Node &insert(size_t index, const T_Node &node) {
+        T_Node &insert(size_t index, const std::decay_t<decltype(std::declval<T_Node>().getValue())> &data) {
+            T_Node newNode;
+            newNode.setValue(data);
+
             if (!self().root) {
                 self().root = new T_Node();
-                copyAll(*self().root, node);
+                copyAll(*self().root, newNode);
                 return *self().root;
             }
-            T_Node &inserted = self().root->template insert<size_counter>(index, std::move(node));
+            T_Node &inserted = self().root->template insert<size_counter>(index, std::move(newNode));
             if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
                 self().balanceUp(&inserted);
             }
@@ -823,7 +826,7 @@ struct TreeMixer {
         using mixins::SureIAmThat<T_Tree, InsertSorted>::self;
 
     private:
-        T_Node *_insert(const decltype(std::declval<T_Node>().getValue()) &value) {
+        T_Node *_insert(const std::decay_t<decltype(std::declval<T_Node>().getValue())> &value) {
             if (!self().root) {
                 self().root = new T_Node();
                 return &self().root->setValue(value);
@@ -854,7 +857,7 @@ struct TreeMixer {
         }
 
     public:
-        bool insert(const decltype(std::declval<T_Node>().getValue()) &value) {
+        bool insert(const std::decay_t<decltype(std::declval<T_Node>().getValue())> &value) {
             T_Node *inserted = _insert(value);
             if (inserted) {
                 if constexpr (requires { requires mixins::Mixin<T_Tree, Balancer>; }) {
@@ -871,11 +874,11 @@ struct TreeMixer {
     struct FindSorted : mixins::SureIAmThat<T_Tree, FindSorted> {
         using mixins::SureIAmThat<T_Tree, FindSorted>::self;
 
-        T_Node *find(const decltype(std::declval<T_Node>().getValue()) &value) {
+        T_Node *find(const std::decay_t<decltype(std::declval<T_Node>().getValue())> &value) {
             return const_cast<T_Node *>(detail::as_const(*this).find(value));
         }
 
-        const T_Node *find(const decltype(std::declval<T_Node>().getValue()) &value) const {
+        const T_Node *find(const std::decay_t<decltype(std::declval<T_Node>().getValue())> &value) const {
             if (!self().root) {
                 return nullptr;
             }
