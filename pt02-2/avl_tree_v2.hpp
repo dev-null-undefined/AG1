@@ -410,6 +410,10 @@ struct ValueNode {
             return _value;
         }
 
+        T &getValue() {
+            return _value;
+        }
+
         T_Node &setValue(T value) {
             _value = std::move(value);
             if constexpr (requires { requires mixins::Mixin<T_Node, BubbleUp>; }) {
