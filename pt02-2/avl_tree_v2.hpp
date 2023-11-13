@@ -645,7 +645,7 @@ struct Insert : mixins::SureIAmThat<T_Node, Insert> {
         copyAll(*aux, self());
         toInsert->setChild(direction, std::move(aux));
         copyAll(self(), node);
-        return self();
+        return *toInsert->getChild(direction);
     }
 };
 
