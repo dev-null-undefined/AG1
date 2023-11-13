@@ -683,6 +683,7 @@ struct InsertAt : mixins::SureIAmThat<T_Node, InsertAt>, PushBack<T_Node>, Inser
 template<typename T_Node>
 struct TreeMixer {
     static constexpr auto default_size_counter = NormalSize<T_Node>;
+
     template<typename T_Tree>
     struct Inner : mixins::SureIAmThat<T_Tree, Inner> {
         using mixins::SureIAmThat<T_Tree, Inner>::self;
@@ -794,7 +795,7 @@ struct TreeMixer {
 
         template<auto size_counter = default_size_counter>
         T_Node &find(size_t index) {
-            return self().root->template find<size_counter>(index);
+            return const_cast<T_Node &>(detail::as_const(*this).template find<size_counter>(index));
         }
     };
 
