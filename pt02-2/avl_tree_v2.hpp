@@ -34,6 +34,9 @@ namespace detail {
     constexpr std::add_const_t<T> &as_const(T &t) noexcept {
         return t;
     }
+
+    template<typename T, typename N>
+    using const_if_const = std::conditional_t<std::is_const_v<std::remove_reference_t<T>>, std::add_const_t<N>, N>;
 }
 
 template<typename T>
@@ -98,6 +101,7 @@ namespace mixins {
 
     template<typename T, template<typename> typename ...M>
     concept Mixin = (std::is_base_of_v<M<std::decay_t<T>>, std::decay_t<T>> && ...);
+
 }
 
 // region execAll macro
@@ -127,14 +131,14 @@ namespace mixins {\
         }\
         if constexpr (requires(T &&t) {\
             {\
-            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(t).Function(std::forward<Args>(args)...)\
             }->std::same_as<void>;\
-        }) { static_cast<Current &&>(self).Function(std::forward<Args>(args)...); }\
+        }) { static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(self).Function(std::forward<Args>(args)...); }\
         else if constexpr (requires(T &&t) {\
             {\
-            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(t).Function(std::forward<Args>(args)...)\
             };\
-        }) { lambda(static_cast<Current &&>(self).Function(std::forward<Args>(args)...)); }\
+        }) { lambda(static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(self).Function(std::forward<Args>(args)...)); }\
     }\
     \
     template<typename T, typename Current, typename...Args>\
@@ -146,9 +150,9 @@ namespace mixins {\
         }\
         if constexpr (requires(T &&t) {\
             {\
-            static_cast<Current &&>(t).Function(std::forward<Args>(args)...)\
+            static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(t).Function(std::forward<Args>(args)...)\
             };\
-        }) { static_cast<Current &&>(self).Function(std::forward<Args>(args)...); }\
+        }) { static_cast<detail::const_if_const<std::remove_reference_t<T>,Current> &&>(self).Function(std::forward<Args>(args)...); }\
     }\
 }
 
@@ -312,7 +316,7 @@ struct Debug : mixins::SureIAmThat<T_Node, Debug> {
     using mixins::SureIAmThat<T_Node, Debug>::self;
 
 public:
-    std::string getDebug() {
+    std::string getDebug() const {
         std::string buffer = "\"";
         mixinInfoAllRet(self(), [&buffer](const auto &out) noexcept {
             buffer += (buffer.size() > 1 ? ", " : "") + better_to_string(out);
@@ -334,13 +338,13 @@ struct GraphViz : mixins::SureIAmThat<T_Node, GraphViz>, Debug<T_Node> {
     using mixins::SureIAmThat<T_Node, GraphViz>::self;
 private:
 
-    void bst_print_dot_null(T_Node &node, int nullcount, std::ostream &output, Direction dir) const {
+    static void bst_print_dot_null(const T_Node &node, int nullcount, std::ostream &output, Direction dir) {
         output << "    null" << nullcount << " [shape=point];\n";
         output << "    " << node.getDebug() << " -> null" << nullcount
                << (dir == Direction::left ? "[color=blue]" : "[color=red]") << ";\n";
     }
 
-    void bst_print_dot_aux(T_Node &node, std::ostream &output) const {
+    static void bst_print_dot_aux(const T_Node &node, std::ostream &output) {
         static int nullcount = 0;
         if (node.parent) {
             output << "    " << node.getDebug() << " -> " << node.parent->getDebug() << "[style=dotted];\n";
@@ -360,7 +364,7 @@ private:
     }
 
 public:
-    void generateGraph(std::ostream &output = std::cout) {
+    void generateGraph(std::ostream &output = std::cout) const {
         output << "digraph BST {\n";
         output << "    node [fontname=\"Arial\"];\n";
 
@@ -374,8 +378,7 @@ public:
 
 #ifndef __PROGTEST__
 
-    void generateGraph(const std::string &filename) {
-
+    void generateGraph(const std::string &filename) const {
         auto tmpDir = fs::temp_directory_path();
         auto tmpFile = tmpDir / (filename + ".dot");
         std::ofstream output(tmpFile);
@@ -399,8 +402,8 @@ struct ValueNode {
         T _value;
 
     public:
-        auto mixinInfo() {
-            return _value == '\n' ? "/n" : (!isalnum(_value) ? "\\" + std::to_string(_value) : std::string(1, _value));
+        auto mixinInfo() const {
+            return std::to_string(_value) + "," + std::to_string(self().getIndex());
         }
 
         const T &getValue() const {
@@ -451,7 +454,7 @@ struct SizeCounter : mixins::SureIAmThat<T_Node, SizeCounter> {
         return 0;
     }
 
-    std::string mixinInfo() {
+    std::string mixinInfo() const {
         return "s: " + std::to_string(size);
     }
 
@@ -478,7 +481,7 @@ struct FilteredSizeCounter {
             return 0;
         }
 
-        std::string mixinInfo() {
+        std::string mixinInfo() const {
             return "f[" + std::to_string(filter) + "]: " + std::to_string(size);
         }
 
@@ -501,7 +504,7 @@ struct MaxDepth : mixins::SureIAmThat<T_Node, MaxDepth> {
         return 0;
     }
 
-    auto mixinInfo() {
+    auto mixinInfo() const {
         return "d:" + std::to_string(maxDepth);
     }
 

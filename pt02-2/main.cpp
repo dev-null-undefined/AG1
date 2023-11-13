@@ -80,7 +80,7 @@ struct TextEditorBackend {
 
     void insert(size_t i, char c) {
         assertIndex(i);
-        tree.insert(i, NodeType()).setValue(c);
+        tree.insert(i, c);
     }
 
     void erase(size_t i) {
