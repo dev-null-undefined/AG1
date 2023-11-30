@@ -22,7 +22,7 @@
 
 #endif
 
-//#define __PROGTEST__
+#define __PROGTEST__
 
 #include "main.cpp"
 
@@ -105,7 +105,7 @@ struct X {
     X operator++(int) {
         auto cpy = X(*this);
         // stop on each fail
-        raise(SIGTRAP);
+//        raise(SIGTRAP);
         value++;
         return cpy;
     }

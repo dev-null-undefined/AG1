@@ -60,7 +60,6 @@ int get_sign(T t) {
 namespace mixins {
     template<template<typename> typename ...T_mixins>
     struct Mixins : T_mixins<Mixins<T_mixins...>> ... {
-        using T_this = Mixins<T_mixins...>;
 
         template<size_t N>
         using N_type = std::tuple_element_t<N, std::tuple<T_mixins<Mixins<T_mixins...>>...>>;
